@@ -1,0 +1,33 @@
+import express from 'express';
+import {
+  getMyBookings,
+  getAllBookings,
+  createBooking,
+  updateBookingStatus,
+  requestRefund,
+  deleteBooking,
+  resolveRefundRequest,
+  lookupGuestBooking,
+  createGroupBooking,
+  sendReminder,
+  getBookingSchedule,
+  getBookingById
+} from '../controllers/bookingController.js';
+import { protect, adminOnly, optionalAuth } from '../middleware/authMiddleware.js';
+
+const router = express.Router();
+
+router.get('/mine', protect, getMyBookings);
+router.get('/lookup', lookupGuestBooking);
+router.get('/', protect, adminOnly, getAllBookings);
+router.post('/', optionalAuth, createBooking);
+router.put('/:id/status', protect, adminOnly, updateBookingStatus);
+router.post('/:id/refund-request', protect, requestRefund);
+router.get('/:id/schedule', protect, getBookingSchedule);
+router.get('/:id', protect, getBookingById);
+router.put('/:id/refund-resolve', protect, adminOnly, resolveRefundRequest);
+router.post('/:id/reminder', protect, adminOnly, sendReminder);
+router.post('/group', protect, createGroupBooking);
+router.delete('/:id', protect, deleteBooking);
+
+export default router;

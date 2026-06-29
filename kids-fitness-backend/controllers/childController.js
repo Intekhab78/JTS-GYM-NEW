@@ -1,0 +1,69 @@
+import asyncHandler from 'express-async-handler';
+import Child from '../models/Child.js';
+import { resolveReadLocationId, resolveWriteLocationId } from '../utils/locationScope.js';
+
+export const getMyChildren = asyncHandler(async (req, res) => {
+  const children = await Child.find({ parentId: req.user._id }).sort({ createdAt: -1 });
+  res.json(children);
+});
+
+export const getAllChildren = asyncHandler(async (req, res) => {
+  const locationId = resolveReadLocationId(req);
+  const filter = locationId ? { locationId } : {};
+  if (req.query.parentId) filter.parentId = req.query.parentId;
+  const children = await Child.find(filter).sort({ createdAt: -1 });
+  res.json(children);
+});
+
+export const createChild = asyncHandler(async (req, res) => {
+  const { name, age, gender, parentId } = req.body;
+  if (!name || !age) {
+    res.status(400);
+    throw new Error('Name and age are required');
+  }
+
+  const isAdminOrStaff = req.user.role !== 'parent' && req.user.role !== 'customer';
+  const finalParentId = (isAdminOrStaff && parentId) ? parentId : req.user._id;
+
+  const locationId = resolveWriteLocationId(req);
+  const created = await Child.create({ parentId: finalParentId, name, age, gender, locationId });
+  res.status(201).json(created);
+});
+
+export const updateChild = asyncHandler(async (req, res) => {
+  const child = await Child.findById(req.params.id);
+  if (!child) {
+    res.status(404);
+    throw new Error('Child not found');
+  }
+  if (child.parentId.toString() !== req.user._id.toString() && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    res.status(403);
+    throw new Error('Not allowed');
+  }
+  Object.assign(child, req.body);
+  const saved = await child.save();
+  res.json(saved);
+});
+
+export const deleteChild = asyncHandler(async (req, res) => {
+  const child = await Child.findById(req.params.id);
+  if (!child) {
+    res.status(404);
+    throw new Error('Child not found');
+  }
+  if (child.parentId.toString() !== req.user._id.toString() && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    res.status(403);
+    throw new Error('Not allowed');
+  }
+  await child.deleteOne();
+  res.json({ message: 'Child removed' });
+});
+
+export const getChildById = asyncHandler(async (req, res) => {
+  const child = await Child.findById(req.params.id).populate('parentId', 'name email phone');
+  if (!child) {
+    res.status(404);
+    throw new Error('Child not found');
+  }
+  res.json(child);
+});

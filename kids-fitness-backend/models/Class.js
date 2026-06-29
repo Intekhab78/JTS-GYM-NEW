@@ -1,0 +1,35 @@
+import mongoose from 'mongoose';
+
+const classSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    description: { type: String },
+    ageGroup: { type: String },
+    minAge: { type: Number },
+    maxAge: { type: Number },
+    genderRestriction: { type: String, enum: ['male', 'female', 'any'], default: 'any' },
+    duration: { type: String },
+    availableTrainers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Trainer' }],
+    price: { type: Number, required: true },
+    b2bPrice: { type: Number },
+    vendorPrices: [{
+      vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor' },
+      price: { type: Number, required: true },
+      startDate: { type: Date },
+      endDate: { type: Date }
+    }],
+    capacity: { type: Number },
+    locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Location' },
+    brandId: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand' },
+    imageUrl: { type: String },
+    taxId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tax' },
+    creditCost: { type: Number, default: 1 },
+    status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+    categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
+    isUAT: { type: Boolean, default: false, index: true }
+  },
+  { timestamps: true }
+);
+
+const ClassModel = mongoose.model('Class', classSchema);
+export default ClassModel;

@@ -1,0 +1,158 @@
+import dotenv from 'dotenv';
+import { uatDetector } from './middleware/uatMiddleware.js';
+dotenv.config();
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL ERROR: JWT_SECRET is not defined in .env file!');
+  process.exit(1);
+}
+console.log('JWT_SECRET verified and loaded.');
+
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import path from 'path';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+
+import connectDB from './config/db.js';
+import { notFound, errorHandler } from './middleware/errorMiddleware.js';
+import { locationMiddleware } from './middleware/locationMiddleware.js';
+import { tenantMiddleware } from './middleware/tenantMiddleware.js';
+
+import authRoutes from './routes/authRoutes.js';
+import locationRoutes from './routes/locationRoutes.js';
+import classRoutes from './routes/classRoutes.js';
+import planRoutes from './routes/planRoutes.js';
+import childRoutes from './routes/childRoutes.js';
+import bookingRoutes from './routes/bookingRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import trainerRoutes from './routes/trainerRoutes.js';
+import sessionRoutes from './routes/sessionRoutes.js';
+import attendanceRoutes from './routes/attendanceRoutes.js';
+import membershipRoutes from './routes/membershipRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
+import trialRoutes from './routes/trialRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
+import specialtyRoutes from './routes/specialtyRoutes.js';
+import roleRoutes from './routes/roleRoutes.js';
+import invoiceRoutes from './routes/invoiceRoutes.js';
+import settingRoutes from './routes/settingRoutes.js';
+import extensionRoutes from './routes/extensionRoutes.js';
+import promotionRoutes from './routes/promotionRoutes.js';
+import taxRoutes from './routes/taxRoutes.js';
+import couponRoutes from './routes/couponRoutes.js';
+import leadRoutes from './routes/leadRoutes.js';
+import expenseRoutes from './routes/expenseRoutes.js';
+import categoryRoutes from './routes/categoryRoutes.js';
+import uatRoutes from './routes/uatRoutes.js';
+import abortedBookingRoutes from './routes/abortedBookingRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
+import shiftRoutes from './routes/shiftRoutes.js';
+import brandRoutes from './routes/brandRoutes.js';
+import cmsRoutes from './routes/cmsRoutes.js';
+import vendorRoutes from './routes/vendorRoutes.js';
+import { initCronJobs } from './utils/cronJobs.js';
+
+const app = express();
+const httpServer = createServer(app);
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',')
+  : [process.env.FRONTEND_URL || 'http://localhost:5173', 'http://localhost:5174'];
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  transports: ['polling', 'websocket']
+});
+
+// Make io accessible in controllers
+app.set('io', io);
+
+io.on('connection', (socket) => {
+  console.log('New client connected:', socket.id);
+
+  socket.on('join_admin', () => {
+    socket.join('admin_room');
+    console.log('Client joined admin room:', socket.id);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+app.use(express.json());
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+}));
+app.use(morgan('dev'));
+app.use(uatDetector);
+app.use(locationMiddleware);
+app.use(tenantMiddleware);
+
+const __dirname = path.resolve();
+app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
+
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'jts-booking-backend' });
+});
+
+app.use('/api/auth', authRoutes);
+app.use('/api/locations', locationRoutes);
+app.use('/api/classes', classRoutes);
+app.use('/api/plans', planRoutes);
+app.use('/api/children', childRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/trainers', trainerRoutes);
+app.use('/api/sessions', sessionRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/memberships', membershipRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/trials', trialRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/settings', settingRoutes);
+app.use('/api/specialties', specialtyRoutes);
+app.use('/api/roles', roleRoutes);
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/extensions', extensionRoutes);
+app.use('/api/promotions', promotionRoutes);
+app.use('/api/taxes', taxRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/leads', leadRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/uat', uatRoutes);
+app.use('/api/aborted-bookings', abortedBookingRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/shifts', shiftRoutes);
+app.use('/api/brands', brandRoutes);
+app.use('/api/cms', cmsRoutes);
+app.use('/api/vendors', vendorRoutes);
+
+app.use(notFound);
+app.use(errorHandler);
+
+const PORT = process.env.PORT || 5000;
+
+connectDB()
+  .then(() => {
+    httpServer.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      initCronJobs();
+    });
+  })
+  .catch((err) => {
+    console.error('DB connection failed', err);
+    process.exit(1);
+  });

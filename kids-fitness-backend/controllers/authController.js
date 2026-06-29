@@ -1,0 +1,358 @@
+import asyncHandler from 'express-async-handler';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+import Trainer from '../models/Trainer.js';
+import Role from '../models/Role.js';
+import Child from '../models/Child.js';
+import { resolveWriteLocationId } from '../utils/locationScope.js';
+import { linkUserBookings } from './bookingController.js';
+import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/mailer.js';
+import crypto from 'crypto';
+import { withUAT } from '../middleware/uatMiddleware.js';
+
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+  });
+};
+
+export const registerUser = asyncHandler(async (req, res) => {
+  const {
+    name, email: rawEmail, phone, password,
+    firstName, lastName, instagram, gender,
+    relationship, birthDate, address, city,
+    country, avatarUrl, locationIds: preferredLocationIds,
+    children // Array of child objects
+  } = req.body;
+
+  const email = rawEmail?.trim().toLowerCase();
+
+  if (!name || !email || !password) {
+    res.status(400);
+    throw new Error('Name, email, and password are required');
+  }
+
+  const uatFilter = req.isUAT 
+    ? { isUAT: true } 
+    : { $or: [{ isUAT: false }, { isUAT: { $exists: false } }] };
+
+  const userExists = await User.findOne({ email, ...uatFilter });
+  if (userExists) {
+    res.status(400);
+    throw new Error('User already exists');
+  }
+
+  const salt = await bcrypt.genSalt(10);
+  const hashed = await bcrypt.hash(password, salt);
+
+  const locationIds = preferredLocationIds || [resolveWriteLocationId(req)].filter(Boolean);
+
+  const user = await User.create({
+    name,
+    firstName,
+    lastName,
+    email,
+    phone,
+    password: hashed,
+    locationIds,
+    instagram,
+    gender,
+    relationship,
+    birthDate,
+    address,
+    city,
+    country,
+    avatarUrl,
+    role: 'customer', // Force customer role for public registration
+    isUAT: req.isUAT || false,
+    brandIds: req.brandId ? [req.brandId] : []
+  });
+
+  // Create children if provided
+  if (children && Array.isArray(children)) {
+    for (const childData of children) {
+      if (childData.firstName) {
+        const age = childData.age || (childData.birthDate ? Math.floor((new Date() - new Date(childData.birthDate)) / (365.25 * 24 * 60 * 60 * 1000)) : 0);
+        await Child.create({
+          parentId: user._id,
+          name: `${childData.firstName} ${childData.lastName || ''}`.trim(),
+          firstName: childData.firstName,
+          lastName: childData.lastName,
+          birthDate: childData.birthDate,
+          age: age,
+          gender: childData.gender || 'other',
+          photoUrl: childData.photoUrl,
+          school: childData.school,
+          medicalCondition: childData.medicalCondition,
+          locationId: locationIds[0]
+        });
+      }
+    }
+  }
+
+  // Link any guest bookings made with this email to the new account
+  await linkUserBookings(user);
+
+  // Send Welcome Email
+  sendWelcomeEmail(user).catch(err => console.error('Welcome email failed:', err.message));
+
+  let trainerId = null;
+  let permissions = [];
+  if (user.role === 'superadmin') {
+    permissions = ['*'];
+  } else {
+    const roleDoc = await Role.findOne({ name: { $regex: new RegExp(`^${user.role}$`, 'i') }, status: 'active' });
+    permissions = roleDoc ? roleDoc.permissions || [] : [];
+  }
+
+  if (user.role === 'trainer') {
+    const trainerProfile = await Trainer.findOne({ userId: user._id });
+    trainerId = trainerProfile?._id;
+  }
+
+  res.status(201).json({
+    _id: user._id,
+    name: user.name,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    locationIds: user.locationIds,
+    avatarUrl: user.avatarUrl,
+    trainerId,
+    permissions,
+    allowUAT: user.allowUAT,
+    canManageShifts: user.canManageShifts,
+    token: generateToken(user._id)
+  });
+});
+
+export const loginUser = asyncHandler(async (req, res) => {
+  const { email: rawEmail, password } = req.body;
+  const email = rawEmail?.trim().toLowerCase();
+  if (!email || !password) {
+    res.status(400);
+    throw new Error('Email and password are required');
+  }
+
+  const uatFilter = req.isUAT 
+    ? { isUAT: true } 
+    : { $or: [{ isUAT: false }, { isUAT: { $exists: false } }] };
+
+  const user = await User.findOne({ email, ...uatFilter });
+
+  if (!user) {
+    res.status(401);
+    throw new Error('Invalid credentials');
+  }
+
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    res.status(401);
+    throw new Error('Invalid credentials');
+  }
+
+  // Check Account Status
+  if (user.status === 'inactive') {
+    res.status(401);
+    throw new Error('This account has been deactivated. Please contact support.');
+  }
+
+  // Ensure any guest bookings made with this email are linked
+  await linkUserBookings(user);
+
+  let trainerId = null;
+  let permissions = [];
+  if (user.role === 'superadmin') {
+    permissions = ['*'];
+  } else {
+    const roleDoc = await Role.findOne({ name: { $regex: new RegExp(`^${user.role}$`, 'i') }, status: 'active' });
+    permissions = roleDoc ? roleDoc.permissions || [] : [];
+  }
+
+  if (user.role === 'trainer') {
+    const trainerProfile = await Trainer.findOne({ userId: user._id });
+    trainerId = trainerProfile?._id;
+  }
+
+  res.json({
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    locationIds: user.locationIds,
+    trainerId,
+    permissions,
+    allowUAT: user.allowUAT,
+    canManageShifts: user.canManageShifts,
+    token: generateToken(user._id)
+  });
+});
+
+export const getMe = asyncHandler(async (req, res) => {
+  const user = req.user.toObject ? req.user.toObject() : { ...req.user };
+  let trainerId = null;
+  let permissions = [];
+
+  if (user.role === 'superadmin') {
+    permissions = ['*'];
+  } else if (user.role) {
+    const roleDoc = await Role.findOne({ name: { $regex: new RegExp(`^${user.role}$`, 'i') }, status: 'active' });
+    permissions = roleDoc ? roleDoc.permissions || [] : [];
+  }
+
+  if (user.role === 'trainer') {
+    const trainerProfile = await Trainer.findOne({ userId: user._id });
+    trainerId = trainerProfile?._id;
+  }
+
+  res.json({
+    ...user,
+    trainerId,
+    permissions
+  });
+});
+
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const email = req.body.email?.trim().toLowerCase();
+  const user = await User.findOne(withUAT(req, { email }));
+
+  if (!user) {
+    // For security, don't reveal if user exists. Just say "If an account exists..."
+    return res.status(200).json({ message: 'If an account exists for that email, a reset link has been sent.' });
+  }
+
+  // Create reset token
+  const resetToken = crypto.randomBytes(20).toString('hex');
+
+  // Hash and set to user record
+  user.resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  // Set expire (1 hour)
+  user.resetPasswordExpires = Date.now() + 3600000;
+
+  await user.save();
+
+  // Create reset URL
+  const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
+
+  try {
+    const sent = await sendPasswordResetEmail(user, resetUrl);
+    if (!sent) {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+      res.status(500);
+      throw new Error('Email could not be sent');
+    }
+
+    res.status(200).json({ message: 'Password reset link sent to email' });
+  } catch (err) {
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+    res.status(500);
+    throw new Error('Email could not be sent');
+  }
+});
+
+export const resetPassword = asyncHandler(async (req, res) => {
+  // Hash token from params to compare with hashed token in DB
+  const resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(req.params.token)
+    .digest('hex');
+
+  const user = await User.findOne({
+    resetPasswordToken,
+    resetPasswordExpires: { $gt: Date.now() }
+  });
+
+  if (!user) {
+    res.status(400);
+    throw new Error('Invalid or expired reset token');
+  }
+
+  // Set new password
+  const salt = await bcrypt.genSalt(10);
+  user.password = await bcrypt.hash(req.body.password, salt);
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpires = undefined;
+
+  await user.save();
+
+  res.status(200).json({
+    message: 'Password reset successful. You can now log in.'
+  });
+});
+export const updateMe = asyncHandler(async (req, res) => {
+  console.log('UpdateMe Request Body:', req.body);
+  console.log('UpdateMe User ID:', req.user?._id);
+
+  const user = await User.findById(req.user._id);
+
+  if (user) {
+    // Explicitly update fields and handle potential nulls/empty strings
+    user.name = req.body.name || user.name;
+    user.firstName = req.body.firstName !== undefined ? req.body.firstName : user.firstName;
+    user.lastName = req.body.lastName !== undefined ? req.body.lastName : user.lastName;
+    user.phone = req.body.phone !== undefined ? req.body.phone : user.phone;
+    user.gender = req.body.gender || user.gender;
+    user.birthDate = req.body.birthDate || user.birthDate;
+    user.address = req.body.address !== undefined ? req.body.address : user.address;
+    user.city = req.body.city !== undefined ? req.body.city : user.city;
+    user.country = req.body.country || user.country;
+    user.avatarUrl = req.body.avatarUrl !== undefined ? req.body.avatarUrl : user.avatarUrl;
+    user.instagram = req.body.instagram !== undefined ? req.body.instagram : user.instagram;
+    user.companyName = req.body.companyName !== undefined ? req.body.companyName : user.companyName;
+    user.tradeLicenseNo = req.body.tradeLicenseNo !== undefined ? req.body.tradeLicenseNo : user.tradeLicenseNo;
+    user.taxNumber = req.body.taxNumber !== undefined ? req.body.taxNumber : user.taxNumber;
+    user.companyAddress = req.body.companyAddress !== undefined ? req.body.companyAddress : user.companyAddress;
+
+    if (req.body.password) {
+      console.log('Updating password for user:', user.email);
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(req.body.password, salt);
+    }
+
+    try {
+      const updatedUser = await user.save();
+      console.log('User updated successfully:', updatedUser.email);
+
+      res.json({
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        role: updatedUser.role,
+        avatarUrl: updatedUser.avatarUrl,
+        gender: updatedUser.gender,
+        birthDate: updatedUser.birthDate,
+        address: updatedUser.address,
+        city: updatedUser.city,
+        country: updatedUser.country,
+        companyName: updatedUser.companyName,
+        tradeLicenseNo: updatedUser.tradeLicenseNo,
+        taxNumber: updatedUser.taxNumber,
+        companyAddress: updatedUser.companyAddress,
+        allowUAT: updatedUser.allowUAT,
+        token: generateToken(updatedUser._id),
+      });
+    } catch (saveErr) {
+      console.error('Mongoose Save Error:', saveErr.message);
+      res.status(400);
+      throw new Error(`Profile update failed: ${saveErr.message}`);
+    }
+  } else {
+    res.status(404);
+    throw new Error('User not found');
+  }
+});
