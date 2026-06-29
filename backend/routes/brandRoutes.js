@@ -5,14 +5,14 @@ import {
   createBrand,
   updateBrand
 } from '../controllers/brandController.js';
-import { protect, adminOnly } from '../middleware/authMiddleware.js';
+import { protect, adminOnly, optionalAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // Only superadmins should really manage brands, but we use adminOnly for now 
 // and can enforce superadmin checks if needed.
 router.route('/')
-  .get(protect, adminOnly, getBrands)
+  .get(optionalAuth, getBrands)
   .post(protect, adminOnly, createBrand);
 
 router.route('/:id')

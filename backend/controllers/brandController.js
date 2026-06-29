@@ -1,10 +1,21 @@
 import asyncHandler from 'express-async-handler';
 import Brand from '../models/Brand.js';
 
-// @desc    Get all brands
+// @desc    Get brands (scoped by role/origin)
 // @route   GET /api/brands
-// @access  Private/Superadmin
+// @access  Public / Scoped
 export const getBrands = asyncHandler(async (req, res) => {
+  if (req.user && req.user.role === 'superadmin') {
+    const brands = await Brand.find({}).sort({ createdAt: -1 });
+    return res.json(brands);
+  }
+
+  if (req.brandId) {
+    const brands = await Brand.find({ _id: req.brandId });
+    return res.json(brands);
+  }
+
+  // Fallback: return all brands if no specific brand context is detected
   const brands = await Brand.find({}).sort({ createdAt: -1 });
   res.json(brands);
 });
