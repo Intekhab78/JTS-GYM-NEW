@@ -29,5 +29,13 @@ export const tenantMiddleware = asyncHandler(async (req, res, next) => {
     }
   }
 
+  // Fallback to the first brand if no brand context is found
+  if (!req.brandId && !req.isAllBrands) {
+    const defaultBrand = await Brand.findOne({}).sort({ createdAt: 1 });
+    if (defaultBrand) {
+      req.brandId = defaultBrand._id.toString();
+    }
+  }
+
   next();
 });
