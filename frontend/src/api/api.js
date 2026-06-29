@@ -3,7 +3,26 @@ import { getToken, clearAuth } from '../utils/auth.js';
 import { getLocationSlug } from '../utils/location.js';
 
 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-export const API_BASE_URL = isLocalhost ? 'http://localhost:5000/api' : (import.meta.env.VITE_API_BASE_URL || 'https://api.jtsonline.shop/api');
+
+// Default to the online backend URL
+let apiBase = 'https://gymapi.jtsonline.shop/api';
+
+if (isLocalhost) {
+  try {
+    const xhr = new XMLHttpRequest();
+    // Synchronously check if the local backend is running on port 5000
+    xhr.open('GET', 'http://localhost:5000/api/settings/global', false);
+    xhr.send();
+    if (xhr.status === 200 || xhr.status === 304) {
+      apiBase = 'http://localhost:5000/api';
+      console.log('Local backend is running. Using: http://localhost:5000/api');
+    }
+  } catch (e) {
+    console.log('Local backend is offline. Switched to online backend: https://gymapi.jtsonline.shop/api');
+  }
+}
+
+export const API_BASE_URL = apiBase;
 export const BASE_URL = API_BASE_URL.replace(/\/api$/, '');
 
 export const getImageUrl = (url) => {
