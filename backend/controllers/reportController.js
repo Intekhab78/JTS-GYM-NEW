@@ -541,7 +541,7 @@ export const getDetailedReport = asyncHandler(async (req, res) => {
       const invoices = await Invoice.find({ ...filter, ...dateFilter, status: 'paid' })
         .populate('userId', 'name email phone')
         .populate('locationId', 'name')
-        .populate('bookingId', 'paymentMethod bookingNumber')
+        .populate('bookingId', 'paymentMethod bookingNumber splitDetails')
         .sort({ date: -1 })
         .lean();
 
@@ -555,7 +555,16 @@ export const getDetailedReport = asyncHandler(async (req, res) => {
         let paymentSource = 'N/A';
         let paymentMode = 'N/A';
 
-        if (rawMethod.toLowerCase().includes('online') || rawMethod.toLowerCase().includes('website')) {
+        if (rawMethod === 'split') {
+          paymentSource = 'CENTER';
+          if (inv.bookingId?.splitDetails && inv.bookingId.splitDetails.length > 0) {
+            paymentMode = 'SPLIT (' + inv.bookingId.splitDetails.map(d => `${d.method.replace('center_', '')}: ${d.amount}`).join(', ') + ')';
+          } else if (inv.splitDetails && inv.splitDetails.length > 0) {
+            paymentMode = 'SPLIT (' + inv.splitDetails.map(d => `${d.method.replace('center_', '')}: ${d.amount}`).join(', ') + ')';
+          } else {
+            paymentMode = 'SPLIT';
+          }
+        } else if (rawMethod.toLowerCase().includes('online') || rawMethod.toLowerCase().includes('website')) {
           paymentSource = 'WEBSITE';
           paymentMode = 'ONLINE';
         } else {

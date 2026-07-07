@@ -5,14 +5,14 @@ import { useSettings } from '../context/SettingsContext.jsx';
 import { getDenominations, formatDenominationLabel } from '../utils/currencyUtils.js';
 
 export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, onShiftChange }) {
-  const { currency } = useSettings();
+  const { currency, globalSettings } = useSettings();
+  const blindClosing = globalSettings?.blind_closing_allow;
   const denominationsList = getDenominations(currency).sort((a, b) => b - a); // highest to lowest
   
   const initialDenominations = denominationsList.reduce((acc, val) => ({ ...acc, [val]: '' }), {});
   const [denominations, setDenominations] = useState(initialDenominations);
   
-  const [actualVisa, setActualVisa] = useState('');
-  const [actualMastercard, setActualMastercard] = useState('');
+  const [actualCardBrands, setActualCardBrands] = useState({});
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -44,8 +44,7 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
   useEffect(() => {
     if (isOpen) {
       setDenominations(initialDenominations);
-      setActualVisa('');
-      setActualMastercard('');
+      setActualCardBrands({});
       setNotes('');
     }
   }, [isOpen, currency]);
@@ -66,10 +65,16 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
         
         // Ensure discrepancy note if required
         const cashDiscrepancy = totalCash - (expectedTotals?.startingCash + expectedTotals?.expectedCash);
-        const visaDiscrepancy = Number(actualVisa || 0) - (expectedTotals?.expectedVisa || 0);
-        const mastercardDiscrepancy = Number(actualMastercard || 0) - (expectedTotals?.expectedMastercard || 0);
+        let cardDiscrepancyTotal = 0;
+        if (expectedTotals?.expectedCardBrands) {
+          Object.keys(expectedTotals.expectedCardBrands).forEach(brand => {
+            const actual = Number(actualCardBrands[brand] || 0);
+            const expected = expectedTotals.expectedCardBrands[brand];
+            if (actual !== expected) cardDiscrepancyTotal += Math.abs(actual - expected);
+          });
+        }
         
-        const hasDiscrepancy = cashDiscrepancy !== 0 || visaDiscrepancy !== 0 || mastercardDiscrepancy !== 0;
+        const hasDiscrepancy = cashDiscrepancy !== 0 || cardDiscrepancyTotal !== 0;
         
         if (hasDiscrepancy && !notes.trim()) {
           toast.error('A discrepancy was found. You must provide notes to explain the difference.');
@@ -79,8 +84,7 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
 
         await shiftApi.closeShift({ 
           actualCash: totalCash, 
-          actualVisa: Number(actualVisa || 0),
-          actualMastercard: Number(actualMastercard || 0),
+          actualCardBrands: actualCardBrands,
           closingDenominations: denominations,
           notes 
         });
@@ -121,7 +125,7 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
           </button>
         </div>
 
-        {currentShift && expectedTotals && (
+        {currentShift && expectedTotals && !blindClosing && (
           <div className="mb-6 rounded-2xl bg-amber-50 p-4 border border-amber-100 flex justify-between items-center">
             <div>
               <p className="text-xs font-bold text-amber-800 uppercase tracking-widest mb-1">Shift Started</p>
@@ -174,7 +178,7 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
                         step="1"
                         value={denominations[value]}
                         onChange={(e) => handleDenominationChange(value, e.target.value)}
-                        className="w-full rounded-xl border-2 border-slate-200 bg-white py-2 px-3 text-center text-sm font-bold outline-none transition-colors focus:border-brand-blue"
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white py-2 px-3 text-center text-sm font-bold text-slate-900 outline-none transition-colors focus:border-brand-blue"
                         placeholder="0"
                       />
                       <span className="text-sm font-black text-ink text-right">
@@ -200,51 +204,37 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
                       Card Reconciliation (Z-Out)
                     </h3>
                     <div className="space-y-4">
-                      
-                      <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-sm font-black text-blue-800 flex items-center gap-2">
-                            <span className="w-8 h-5 bg-blue-100 rounded-sm flex items-center justify-center text-[8px] font-black">VISA</span>
-                            Visa
-                          </span>
-                          <span className="text-xs font-bold text-ink/40">Expected: {currency} {expectedTotals.expectedVisa.toFixed(2)}</span>
+                      {expectedTotals.expectedCardBrands && Object.keys(expectedTotals.expectedCardBrands).length > 0 ? (
+                        Object.keys(expectedTotals.expectedCardBrands).map(brand => (
+                          <div key={brand} className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-sm font-black text-blue-800 flex items-center gap-2 capitalize">
+                                <span className="w-8 h-5 bg-blue-100 rounded-sm flex items-center justify-center text-[8px] font-black uppercase">
+                                  {brand === 'mastercard' ? 'MC' : brand === 'american express' || brand === 'amex' ? 'AMEX' : brand}
+                                </span>
+                                {brand}
+                              </span>
+                              {!blindClosing && <span className="text-xs font-bold text-ink/40">Expected: {currency} {expectedTotals.expectedCardBrands[brand].toFixed(2)}</span>}
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink/40 font-bold">{currency}</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={actualCardBrands[brand] || ''}
+                                onChange={(e) => setActualCardBrands(prev => ({...prev, [brand]: e.target.value}))}
+                                className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-12 pr-4 text-sm font-black text-slate-900 outline-none transition-colors focus:border-brand-blue"
+                                placeholder="Actual terminal total..."
+                              />
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-xs font-bold text-ink/40 bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 text-center">
+                          No card transactions recorded for this shift.
                         </div>
-                        <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink/40 font-bold">{currency}</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={actualVisa}
-                            onChange={(e) => setActualVisa(e.target.value)}
-                            className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-12 pr-4 text-sm font-black outline-none transition-colors focus:border-brand-blue"
-                            placeholder="Actual terminal total..."
-                          />
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-sm font-black text-orange-800 flex items-center gap-2">
-                            <span className="w-8 h-5 bg-orange-100 rounded-sm flex items-center justify-center text-[8px] font-black">MC</span>
-                            Mastercard
-                          </span>
-                          <span className="text-xs font-bold text-ink/40">Expected: {currency} {expectedTotals.expectedMastercard.toFixed(2)}</span>
-                        </div>
-                        <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink/40 font-bold">{currency}</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={actualMastercard}
-                            onChange={(e) => setActualMastercard(e.target.value)}
-                            className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-12 pr-4 text-sm font-black outline-none transition-colors focus:border-brand-blue"
-                            placeholder="Actual terminal total..."
-                          />
-                        </div>
-                      </div>
-
+                      )}
                     </div>
                   </div>
 
@@ -259,19 +249,18 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
                           expected={expectedTotals.startingCash + expectedTotals.expectedCash} 
                           actual={totalCash} 
                           currency={currency} 
+                          isBlind={blindClosing}
                        />
-                       <VarianceRow 
-                          label="Visa" 
-                          expected={expectedTotals.expectedVisa} 
-                          actual={Number(actualVisa || 0)} 
-                          currency={currency} 
-                       />
-                       <VarianceRow 
-                          label="Mastercard" 
-                          expected={expectedTotals.expectedMastercard} 
-                          actual={Number(actualMastercard || 0)} 
-                          currency={currency} 
-                       />
+                       {expectedTotals.expectedCardBrands && Object.keys(expectedTotals.expectedCardBrands).map(brand => (
+                         <VarianceRow 
+                            key={brand}
+                            label={<span className="capitalize">{brand}</span>} 
+                            expected={expectedTotals.expectedCardBrands[brand]} 
+                            actual={Number(actualCardBrands[brand] || 0)} 
+                            currency={currency} 
+                            isBlind={blindClosing}
+                         />
+                       ))}
                     </div>
                   </div>
 
@@ -280,12 +269,13 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
                     <textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50 p-4 text-sm outline-none transition-colors focus:border-brand-blue focus:bg-white min-h-[100px]"
+                      className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50 p-4 text-sm text-ink outline-none transition-colors focus:border-brand-blue focus:bg-white min-h-[100px]"
                       placeholder="Explain any discrepancies here..."
                       required={(
                          (totalCash - (expectedTotals.startingCash + expectedTotals.expectedCash) !== 0) ||
-                         (Number(actualVisa || 0) - expectedTotals.expectedVisa !== 0) ||
-                         (Number(actualMastercard || 0) - expectedTotals.expectedMastercard !== 0)
+                         (expectedTotals.expectedCardBrands && Object.keys(expectedTotals.expectedCardBrands).some(brand => 
+                            Number(actualCardBrands[brand] || 0) - expectedTotals.expectedCardBrands[brand] !== 0
+                         ))
                       )}
                     />
                     <p className="text-xs text-ink/40 font-bold mt-2">
@@ -322,7 +312,7 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
 }
 
 // Helper component for variance rows
-function VarianceRow({ label, expected, actual, currency }) {
+function VarianceRow({ label, expected, actual, currency, isBlind }) {
   const diff = actual - expected;
   const isMatch = Math.abs(diff) < 0.01;
   const isOver = diff > 0.01;
@@ -335,7 +325,7 @@ function VarianceRow({ label, expected, actual, currency }) {
             <span className="text-xs font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-md">MATCH</span>
           ) : (
             <span className={`text-xs font-black px-2 py-1 rounded-md ${isOver ? 'text-amber-600 bg-amber-50' : 'text-rose-600 bg-rose-50'}`}>
-              {isOver ? '+' : ''}{diff.toFixed(2)} {currency}
+              {isBlind ? 'NOT MATCHING' : `${isOver ? '+' : ''}${diff.toFixed(2)} ${currency}`}
             </span>
           )}
        </div>

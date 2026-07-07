@@ -15,11 +15,11 @@ export const initCronJobs = () => {
             const tomorrowEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);   // 25 hours from now
 
             // 1. CUSTOMER REMINDERS (Based on Bookings)
-            // Find confirmed bookings for sessions starting in ~24 hours that haven't been reminded
+            // Find confirmed bookings for sessions starting in the next ~25 hours that haven't been reminded
             const pendingCustomerReminders = await Booking.find({
                 status: 'confirmed',
                 reminderSent: false,
-                date: { $gte: tomorrowStart, $lte: tomorrowEnd }
+                date: { $gte: now, $lte: tomorrowEnd }
             })
             .populate('userId', 'name email firstName')
             .populate('classId', 'title')
@@ -52,11 +52,11 @@ export const initCronJobs = () => {
             }
 
             // 2. TRAINER REMINDERS (Based on Sessions)
-            // Find scheduled sessions starting in ~24 hours that haven't sent trainer reminders
+            // Find scheduled sessions starting in the next ~25 hours that haven't sent trainer reminders
             const pendingTrainerReminders = await Session.find({
                 status: 'scheduled',
                 trainerReminderSent: false,
-                startTime: { $gte: tomorrowStart, $lte: tomorrowEnd },
+                startTime: { $gte: now, $lte: tomorrowEnd },
                 trainerId: { $ne: null }
             })
             .populate('trainerId', 'name email')
@@ -90,7 +90,7 @@ export const initCronJobs = () => {
             // 3. MEMBERSHIP CUSTOMER REMINDERS (For fixed-schedule plans)
             // Find all sessions starting in the window
             const upcomingSessions = await Session.find({
-                startTime: { $gte: tomorrowStart, $lte: tomorrowEnd },
+                startTime: { $gte: now, $lte: tomorrowEnd },
                 status: 'scheduled'
             }).populate('classId', 'title name');
 

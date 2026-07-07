@@ -28,7 +28,50 @@ export default function TrainerDashboard() {
   const [sessionCategory, setSessionCategory] = useState('all'); // 'all', 'one-day', 'membership'
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(20);
   const { socket } = useSocket();
+
+  // Infinite scrolling for sessions
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollContainer = document.querySelector('.page-shell') || document.documentElement;
+      const isWindow = !document.querySelector('.page-shell');
+      
+      const scrollTop = isWindow ? (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0) : scrollContainer.scrollTop;
+      const scrollHeight = scrollContainer.scrollHeight;
+      const clientHeight = isWindow ? window.innerHeight : scrollContainer.clientHeight;
+
+      if (scrollTop + clientHeight >= scrollHeight - 200) {
+        setVisibleCount((prev) => prev + 20);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // Attempt to attach to container right away and also after a delay to ensure it's in DOM
+    const attachToContainer = () => {
+      const container = document.querySelector('.page-shell');
+      if (container) {
+        container.addEventListener('scroll', handleScroll, { passive: true });
+      }
+    };
+    
+    attachToContainer();
+    setTimeout(attachToContainer, 500);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      const container = document.querySelector('.page-shell');
+      if (container) {
+        container.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, []);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [locationFilter, viewType, sessionCategory, searchQuery]);
 
   // Listen for real-time booking updates
   useEffect(() => {
@@ -436,7 +479,7 @@ export default function TrainerDashboard() {
                   </div>
                 ) : filteredSessions.length > 0 ? (
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
-                    {filteredSessions.map((session) => (
+                    {filteredSessions.slice(0, visibleCount).map((session) => (
                       <div key={session._id} className={`rounded-2xl border p-6 transition-all ${selectedSession?._id === session._id ? 'border-coral bg-coral/5 shadow-md' : 'border-slate-100 bg-slate-50'}`}>
                         <div className="flex justify-between items-start mb-4">
                           <div className="flex flex-col gap-1">
@@ -491,7 +534,7 @@ export default function TrainerDashboard() {
                           <div className="flex gap-2">
                             {viewType === 'upcoming' && session.status !== 'cancelled' && (
                               <>
-                                {session.trainerStatus === 'pending' ? (
+                                {session.trainerStatus === 'pending' && (
                                   <div className="flex gap-1.5 mr-2 pr-2 border-r border-slate-200">
                                     <button
                                       onClick={() => handleUpdateTrainerStatus(session._id, 'accepted')}
@@ -500,10 +543,6 @@ export default function TrainerDashboard() {
                                       {!session.trainerId ? 'Claim & Accept' : 'Accept'}
                                     </button>
                                   </div>
-                                ) : (
-                                  <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border mr-2 ${session.trainerStatus === 'accepted' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                                    {session.trainerStatus}
-                                  </span>
                                 )}
                                 <button
                                   onClick={() => setCancellingSession(session)}

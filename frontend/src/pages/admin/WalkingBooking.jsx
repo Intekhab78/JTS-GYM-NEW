@@ -1,4 +1,4 @@
-import { getImageUrl  } from '../../api/api.js';
+import { getImageUrl } from '../../api/api.js';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/api.js';
@@ -22,20 +22,49 @@ export default function WalkingBooking() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentMethods, setPaymentMethods] = useState(['cash']);
   const [transactionId, setTransactionId] = useState('');
   const [applicablePromos, setApplicablePromos] = useState([]);
   const [selectedPromo, setSelectedPromo] = useState(null);
   const [couponCode, setCouponCode] = useState('');
   const [couponAmount, setCouponAmount] = useState(0);
+  const [appliedCoupons, setAppliedCoupons] = useState([]);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const [bogoOption, setBogoOption] = useState(null); // 'double' or 'person'
   const [allLocationPromos, setAllLocationPromos] = useState([]);
+  const [locationPaymentSettings, setLocationPaymentSettings] = useState(null);
+
+  const availablePaymentMethods = useMemo(() => {
+    if (!locationPaymentSettings) return ['cash', 'card', 'online'];
+    const methods = [];
+    if (locationPaymentSettings.cash) methods.push('cash');
+    
+    // Check if any card is enabled
+    const hasCard = locationPaymentSettings.card && Object.values(locationPaymentSettings.card).some(v => v);
+    if (hasCard) methods.push('card');
+    
+    methods.push('online'); // Keep online default
+    // We no longer add 'coupon' and 'voucher' to availablePaymentMethods
+    // because there is a dedicated coupon redemption section on the left.
+    
+    return methods.length ? methods : ['cash'];
+  }, [locationPaymentSettings]);
+
+  // Cash Drawer State
+  const [cashReceived, setCashReceived] = useState('');
+
+  // Split Payment State
+  const [splitAmounts, setSplitAmounts] = useState({ cash: '', card: '', online: '' });
+
+  // Vendor Sales State
+  const [vendors, setVendors] = useState([]);
+  const [isVendorSale, setIsVendorSale] = useState(false);
+  const [selectedVendorId, setSelectedVendorId] = useState('');
 
   // Step 1: Customer Data
   const [searchQuery, setSearchQuery] = useState('');
   const [customer, setCustomer] = useState(null); // { _id, name, email, phone }
-  const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '' });
+  const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', altPhone: '', gender: '', address: '', birthDate: '' });
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef(null);
@@ -43,7 +72,7 @@ export default function WalkingBooking() {
   // Step 2: Children Data
   const [availableChildren, setAvailableChildren] = useState([]);
   const [selectedChildrenIds, setSelectedChildrenIds] = useState([]);
-  const [newChildren, setNewChildren] = useState([]); // [{ name, age, gender }]
+  const [newChildren, setNewChildren] = useState([]); // [{ name, age, gender, relationship, email, phone }]
 
   // Step 3: Class/Package Data
   const [classes, setClasses] = useState([]);
@@ -69,6 +98,7 @@ export default function WalkingBooking() {
   // View Details Modal State
   const [detailsClass, setDetailsClass] = useState(null);
   const [detailsPlan, setDetailsPlan] = useState(null);
+  const [detailsTrainer, setDetailsTrainer] = useState(null);
 
   // Package Scheduling (For memberships created via admin desk)
   const [preferredDays, setPreferredDays] = useState(['Mon', 'Wed', 'Fri']);
@@ -90,6 +120,44 @@ export default function WalkingBooking() {
 
   const [activeTax, setActiveTax] = useState(null);
 
+  // Prevent navigation when booking is in progress
+  useEffect(() => {
+    const isBookingActive = step > 1 && step < 8;
+
+    const handleBeforeUnload = (e) => {
+      if (isBookingActive) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    const handleClick = (e) => {
+      if (!isBookingActive) return;
+
+      const anchor = e.target.closest('a');
+      // If it's a link (not opening in a new tab)
+      if (anchor && anchor.target !== '_blank') {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowAbortModal(true);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    // Use capture phase to intercept before React Router handles the click
+    document.addEventListener('click', handleClick, true);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('click', handleClick, true);
+    };
+  }, [step]);
+
+  // Scroll to top on step change
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
+
   // Sync selectedLocation with the global navbar selection
   useEffect(() => {
     if (selectedBranch) {
@@ -105,11 +173,22 @@ export default function WalkingBooking() {
       Promise.all([
         api.get(`/classes?locationId=${branchId}`),
         api.get(`/plans?locationId=${branchId}`),
-        api.get(`/promotions/active?locationId=${branchId}`)
-      ]).then(([classesRes, plansRes, promosRes]) => {
+        api.get(`/promotions/active?locationId=${branchId}`),
+        api.get('/vendors?status=active'),
+        api.get(`/locations/${branchId}`)
+      ]).then(([classesRes, plansRes, promosRes, vendorsRes, locationRes]) => {
         setClasses(classesRes.data);
         setPlans(plansRes.data || []);
         setAllLocationPromos(promosRes.data || []);
+        setVendors(vendorsRes.data || []);
+        
+        const settings = locationRes.data?.data?.paymentSettings || locationRes.data?.paymentSettings || { 
+          cash: true, 
+          coupon: true,
+          voucher: true,
+          card: { visa: true, mastercard: true, amex: true, discover: false, other: false }
+        };
+        setLocationPaymentSettings(settings);
       }).catch(err => {
         console.error('Error fetching branch data:', err);
       }).finally(() => setLoading(false));
@@ -156,6 +235,8 @@ export default function WalkingBooking() {
       setApplicablePromos([]);
       setSelectedPromo(null);
       setActiveTax(null);
+      setIsVendorSale(false);
+      setSelectedVendorId('');
     }
   }, [step, bookingMode, selectedLocation, selectedBranch, staff?._id]);
 
@@ -168,12 +249,12 @@ export default function WalkingBooking() {
     const days = preferredDays?.length || 0;
     const slots = preferredSlots?.length || 1;
     const totalSelected = days * slots;
-    
+
     // BOGO logic for capacity doubling (same as Pricing.jsx)
     const isBogo = selectedPromo?.promoType === 'bogo' && bogoOption === 'double';
     const baseCapacity = selectedPlan.classesIncluded || 1;
     const effectiveCapacity = baseCapacity * (isBogo ? 2 : 1);
-    
+
     return Math.max(1, Math.ceil(totalSelected / effectiveCapacity));
   }, [bookingMode, selectedPlan, preferredDays, preferredSlots, selectedPromo, bogoOption]);
 
@@ -206,7 +287,7 @@ export default function WalkingBooking() {
       // Standardize logic: Respect discountType (percentage vs flat) for all other types 
       // (percentage, cash, flash, bulk, lifestyle, cash_deposit)
       const isPercentage = promo.discountType === 'percentage' || promo.promoType === 'percentage';
-      
+
       if (isPercentage) {
         disc = (price * (promo.discountValue / 100));
       } else {
@@ -220,7 +301,7 @@ export default function WalkingBooking() {
   const getPromoForItem = (itemId, itemType) => {
     if (!allLocationPromos.length) return null;
     const targetIdStr = itemId?.toString();
-    
+
     return allLocationPromos.find(p => {
       // Promotion model uses applicableClasses and applicablePlans
       const classes = p.applicableClasses || [];
@@ -239,13 +320,34 @@ export default function WalkingBooking() {
   };
 
   const currentPrice = useMemo(() => {
+    let basePrice = 0;
+
     if (bookingMode === 'package') {
-      const basePrice = selectedPlan?.price || 0;
+      basePrice = selectedPlan?.price || 0;
+
+      // Override price if vendor sale and vendor price exists
+      if (isVendorSale && selectedVendorId && selectedPlan?.vendorPrices) {
+        const vendorPriceObj = selectedPlan.vendorPrices.find(vp => vp.vendorId === selectedVendorId || vp.vendorId?._id === selectedVendorId);
+        if (vendorPriceObj && vendorPriceObj.price !== undefined) {
+          basePrice = vendorPriceObj.price;
+        }
+      }
+
       return (basePrice * membershipUnits) * totalParticipants;
     }
-    const basePrice = selectedClass?.price || 0;
+
+    basePrice = selectedClass?.price || 0;
+
+    // Override price if vendor sale for classes (if classes have vendorPrices in the future)
+    if (isVendorSale && selectedVendorId && selectedClass?.vendorPrices) {
+      const vendorPriceObj = selectedClass.vendorPrices.find(vp => vp.vendorId === selectedVendorId || vp.vendorId?._id === selectedVendorId);
+      if (vendorPriceObj && vendorPriceObj.price !== undefined) {
+        basePrice = vendorPriceObj.price;
+      }
+    }
+
     return basePrice * totalParticipants * (selectedSessions?.length || 1);
-  }, [bookingMode, selectedPlan, selectedClass, totalParticipants, selectedSessions, membershipUnits]);
+  }, [bookingMode, selectedPlan, selectedClass, totalParticipants, selectedSessions, membershipUnits, isVendorSale, selectedVendorId]);
 
   const discountAmount = useMemo(() => {
     if (!selectedPromo) return 0;
@@ -254,22 +356,22 @@ export default function WalkingBooking() {
 
   const currentTax = useMemo(() => {
     if (!activeTax || activeTax.status === 'inactive') return 0;
-    
+
     // Taxable amount is base price minus discounts
     const taxableAmount = Math.max(0, currentPrice - discountAmount - couponAmount);
     if (taxableAmount === 0) return 0;
 
     let taxVal = 0;
     if (activeTax.type === 'percentage') {
-       if (activeTax.calculationMethod === 'inclusive') {
-          taxVal = taxableAmount - (taxableAmount / (1 + (activeTax.value / 100)));
-       } else {
-          taxVal = taxableAmount * (activeTax.value / 100);
-       }
+      if (activeTax.calculationMethod === 'inclusive') {
+        taxVal = taxableAmount - (taxableAmount / (1 + (activeTax.value / 100)));
+      } else {
+        taxVal = taxableAmount * (activeTax.value / 100);
+      }
     } else {
       taxVal = activeTax.value || 0;
     }
-    
+
     return Math.round(taxVal * 100) / 100;
   }, [activeTax, currentPrice, discountAmount, couponAmount]);
 
@@ -377,6 +479,10 @@ export default function WalkingBooking() {
         name: newCustomer.name,
         email: newCustomer.email,
         phone: newCustomer.phone,
+        altPhone: newCustomer.altPhone,
+        gender: newCustomer.gender,
+        address: newCustomer.address,
+        birthDate: newCustomer.birthDate,
         children: []
       });
       const savedUser = res.data.user;
@@ -437,7 +543,7 @@ export default function WalkingBooking() {
   };
 
   const addChildRow = () => {
-    setNewChildren([...newChildren, { name: '', age: '', gender: 'male' }]);
+    setNewChildren([...newChildren, { name: '', age: '', gender: 'male', relationship: '', email: '', phone: '' }]);
   };
 
   const removeChildRow = (idx) => {
@@ -515,6 +621,18 @@ export default function WalkingBooking() {
       // 1. Create payment record
       const taxableAmount = Math.max(0, currentPrice - discountAmount - couponAmount);
       const totalAmount = activeTax?.calculationMethod === 'inclusive' ? taxableAmount : (taxableAmount + currentTax);
+      const standardPrice = selectedPlan?.price * membershipUnits * totalParticipants;
+
+      let tenderedAmount = 0;
+      let changeAmount = 0;
+      if (paymentMethods.includes('cash')) {
+        tenderedAmount = Number(cashReceived) || 0;
+        if (paymentMethods.length === 1) {
+          changeAmount = Math.max(0, tenderedAmount - totalAmount);
+        } else {
+          changeAmount = Math.max(0, tenderedAmount - (Number(splitAmounts.cash) || 0));
+        }
+      }
 
       const payRes = await api.post('/payments', {
         planId: selectedPlan._id,
@@ -522,13 +640,25 @@ export default function WalkingBooking() {
         discountAmount,
         taxAmount: currentTax,
         membershipUnits,
-        paymentMethod: pmMap[paymentMethod] || 'center_cash',
+        paymentMethod: paymentMethods.length > 1 ? 'split' : (pmMap[paymentMethods[0]] || 'center_cash'),
+        splitDetails: paymentMethods.length > 1 ? [
+          { method: 'center_cash', amount: Number(splitAmounts.cash) || 0 },
+          { method: 'center_card', amount: Number(splitAmounts.card) || 0 },
+          { method: 'online_bank', amount: Number(splitAmounts.online) || 0 }
+        ].filter(s => s.amount > 0) : undefined,
         reference,
-        transactionId: (paymentMethod !== 'cash') ? transactionId : undefined,
+        transactionId: (!paymentMethods.includes('cash') || paymentMethods.length > 1) ? transactionId : undefined,
         userId: finalUser._id,
         promotionId: selectedPromo?._id,
+        appliedCoupons,
         couponCode,
-        couponAmount
+        couponAmount,
+        isVendorSale,
+        vendorId: isVendorSale && selectedVendorId ? selectedVendorId : undefined,
+        vendorSalePrice: isVendorSale ? currentPrice : undefined,
+        vendorMargin: isVendorSale ? (standardPrice - currentPrice) : undefined,
+        tenderedAmount,
+        changeAmount
       });
 
       // 2. Create membership for the first selected child
@@ -548,6 +678,7 @@ export default function WalkingBooking() {
         claimBogo: isDoubled || isSiblingBogo,
         bogoChildId: isDoubled ? primaryChildId : (isSiblingBogo ? (selectedChildrenIds[1] === 'self' ? null : selectedChildrenIds[1]) : undefined),
         discountAmount,
+        appliedCoupons,
         couponCode,
         couponAmount
       });
@@ -592,24 +723,50 @@ export default function WalkingBooking() {
       }
 
       // Create Bookings
+      const taxableAmount = Math.max(0, currentPrice - discountAmount - couponAmount);
+      const totalAmountToPay = activeTax?.calculationMethod === 'inclusive' ? taxableAmount : (taxableAmount + currentTax);
+
+      let tenderedAmount = 0;
+      let changeAmount = 0;
+      if (paymentMethods.includes('cash')) {
+        tenderedAmount = Number(cashReceived) || 0;
+        if (paymentMethods.length === 1) {
+          changeAmount = Math.max(0, tenderedAmount - totalAmountToPay);
+        } else {
+          changeAmount = Math.max(0, tenderedAmount - (Number(splitAmounts.cash) || 0));
+        }
+      }
+
       const payload = {
         participants,
         classId: selectedClass._id,
         sessions: selectedSessions.map(s => s._id),
         locationId: selectedLocation,
-        paymentMethod: paymentMethod === 'cash' ? 'center_cash' : (paymentMethod === 'card' ? 'center_card' : 'online_bank'),
-        transactionId: (paymentMethod === 'card' || paymentMethod === 'online') ? transactionId : '',
+        paymentMethod: paymentMethods.length > 1 ? 'split' : (paymentMethods[0] === 'cash' ? 'center_cash' : (paymentMethods[0] === 'card' ? 'center_card' : 'online_bank')),
+        splitDetails: paymentMethods.length > 1 ? [
+          { method: 'center_cash', amount: Number(splitAmounts.cash) || 0 },
+          { method: 'center_card', amount: Number(splitAmounts.card) || 0 },
+          { method: 'online_bank', amount: Number(splitAmounts.online) || 0 }
+        ].filter(s => s.amount > 0) : undefined,
+        transactionId: (paymentMethods.includes('card') || paymentMethods.includes('online')) ? transactionId : '',
         paymentStatus: 'completed',
         userId: finalUser._id,
         taxAmount: currentTax,
         promotionId: selectedPromo?._id,
         discountAmount,
+        appliedCoupons,
         couponCode,
-        couponAmount
+        couponAmount,
+        isVendorSale,
+        vendorId: isVendorSale && selectedVendorId ? selectedVendorId : undefined,
+        vendorSalePrice: isVendorSale ? currentPrice : undefined,
+        vendorMargin: isVendorSale ? ((selectedClass?.price * participants.length * selectedSessions.length) - currentPrice) : undefined,
+        tenderedAmount,
+        changeAmount
       };
 
       const response = await api.post('/bookings/group', payload);
-      setCreatedBookings(response.data.data || []);
+      setCreatedBookings(response.data.bookings || response.data.data || []);
       setStep(8);
       toast.success('Walking booking completed!');
     } catch (err) {
@@ -649,13 +806,13 @@ export default function WalkingBooking() {
       });
 
       toast.success(`Booking ${abortType.toLowerCase()}ed.`);
-      
+
       // Reset form
       setShowAbortModal(false);
       setAbortReason('');
       setStep(1);
       setCustomer(null);
-      setNewCustomer({ name: '', email: '', phone: '' });
+      setNewCustomer({ name: '', email: '', phone: '', altPhone: '', gender: '', address: '', birthDate: '' });
       setSelectedChildrenIds([]);
       setSelectedClass(null);
       setSelectedPlan(null);
@@ -691,7 +848,7 @@ export default function WalkingBooking() {
 
           {step > 1 && step < 8 && (
             <div className="flex justify-end mb-4">
-              <button 
+              <button
                 onClick={() => setShowAbortModal(true)}
                 className="bg-rose-50 text-rose-600 border border-rose-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-100 hover:scale-105 active:scale-95 transition-all shadow-sm flex items-center gap-2"
               >
@@ -813,6 +970,47 @@ export default function WalkingBooking() {
                         placeholder="+971 50 XXXXXXX"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-3 px-1">Alt Phone Number</label>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none"
+                        value={newCustomer.altPhone}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, altPhone: e.target.value })}
+                        placeholder="+971 50 XXXXXXX"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-3 px-1">Date of Birth</label>
+                      <input
+                        type="date"
+                        className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none"
+                        value={newCustomer.birthDate}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, birthDate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-3 px-1">Gender</label>
+                      <select
+                        className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none"
+                        value={newCustomer.gender}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, gender: e.target.value })}
+                      >
+                        <option value="">Select Gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-3 px-1">Address</label>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none"
+                        value={newCustomer.address}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
+                        placeholder="123 Fitness St"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="mt-12 flex justify-between items-center">
@@ -836,28 +1034,28 @@ export default function WalkingBooking() {
                 <div className="space-y-10">
                   {/* Account Holder (Self) */}
                   <div className="animate-rise">
-                     <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-4 px-1">Account Holder</label>
-                     <button
-                        onClick={() => toggleExistingChild('self')}
-                        className={`w-full p-6 rounded-[24px] border-2 transition-all text-left flex items-center justify-between group ${selectedChildrenIds.includes('self') ? 'border-brand-blue bg-brand-blue/5 text-brand-blue shadow-md' : 'border-slate-100 bg-white hover:border-slate-300'}`}
-                     >
-                        <div className="flex items-center gap-4">
-                           <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-xl">👤</div>
-                           <div>
-                              <p className="font-black text-lg">{customer?.name || newCustomer.name}</p>
-                              <p className="text-xs font-bold opacity-60 mt-1">Book for Self</p>
-                           </div>
+                    <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-4 px-1">Account Holder</label>
+                    <button
+                      onClick={() => toggleExistingChild('self')}
+                      className={`w-full p-6 rounded-[24px] border-2 transition-all text-left flex items-center justify-between group ${selectedChildrenIds.includes('self') ? 'border-brand-blue bg-brand-blue/5 text-brand-blue shadow-md' : 'border-slate-100 bg-white hover:border-slate-300'}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-xl">👤</div>
+                        <div>
+                          <p className="font-black text-lg">{customer?.name || newCustomer.name}</p>
+                          <p className="text-xs font-bold opacity-60 mt-1">Book for Self</p>
                         </div>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${selectedChildrenIds.includes('self') ? 'bg-brand-blue text-white' : 'bg-slate-100 group-hover:bg-slate-200'}`}>
-                           {selectedChildrenIds.includes('self') ? '✓' : ''}
-                        </div>
-                     </button>
+                      </div>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${selectedChildrenIds.includes('self') ? 'bg-brand-blue text-white' : 'bg-slate-100 group-hover:bg-slate-200'}`}>
+                        {selectedChildrenIds.includes('self') ? '✓' : ''}
+                      </div>
+                    </button>
                   </div>
 
                   {/* Existing Children */}
                   {availableChildren.length > 0 && (
                     <div className="animate-rise">
-                      <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-4 px-1">Registered Children</label>
+                      <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-4 px-1">Registered Member</label>
                       <div className="grid gap-4 sm:grid-cols-2">
                         {availableChildren.map(child => (
                           <button
@@ -889,11 +1087,11 @@ export default function WalkingBooking() {
                       {newChildren.map((nc, idx) => (
                         <div key={idx} className="p-6 rounded-[28px] bg-white border border-slate-100 shadow-sm relative group animate-rise">
                           <button onClick={() => removeChildRow(idx)} className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-white text-red-400 hover:text-white hover:bg-red-500 shadow-md flex items-center justify-center transition-all border border-slate-50">×</button>
-                          <div className="grid gap-4 md:grid-cols-3">
+                          <div className="grid gap-4 md:grid-cols-6">
                             <div className="space-y-1">
                               <span className="text-[10px] font-black uppercase text-ink/30 ml-2">Name</span>
                               <input
-                                type="text" placeholder="Child Name"
+                                type="text" placeholder="Member Name"
                                 className="w-full bg-slate-50 border-none rounded-xl py-3 px-5 text-sm font-bold placeholder:text-ink/20"
                                 value={nc.name} onChange={(e) => updateChildRow(idx, 'name', e.target.value)}
                               />
@@ -904,6 +1102,42 @@ export default function WalkingBooking() {
                                 type="number" placeholder="Age"
                                 className="w-full bg-slate-50 border-none rounded-xl py-3 px-5 text-sm font-bold"
                                 value={nc.age} onChange={(e) => updateChildRow(idx, 'age', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black uppercase text-ink/30 ml-2">Relationship</span>
+                              <select
+                                className="w-full bg-slate-50 border-none rounded-xl py-3 px-5 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none appearance-none cursor-pointer"
+                                value={nc.relationship || ''}
+                                onChange={(e) => updateChildRow(idx, 'relationship', e.target.value)}
+                              >
+                                <option value="">Select</option>
+                                <option value="Self">Self</option>
+                                <option value="Son">Son</option>
+                                <option value="Daughter">Daughter</option>
+                                <option value="Spouse">Spouse</option>
+                                <option value="Brother">Brother</option>
+                                <option value="Sister">Sister</option>
+                                <option value="Father">Father</option>
+                                <option value="Mother">Mother</option>
+                                <option value="Friend">Friend</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black uppercase text-ink/30 ml-2">Email ID</span>
+                              <input
+                                type="email" placeholder="Email"
+                                className="w-full bg-slate-50 border-none rounded-xl py-3 px-5 text-sm font-bold"
+                                value={nc.email || ''} onChange={(e) => updateChildRow(idx, 'email', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-black uppercase text-ink/30 ml-2">Phone</span>
+                              <input
+                                type="text" placeholder="Phone"
+                                className="w-full bg-slate-50 border-none rounded-xl py-3 px-5 text-sm font-bold"
+                                value={nc.phone || ''} onChange={(e) => updateChildRow(idx, 'phone', e.target.value)}
                               />
                             </div>
                             <div className="space-y-1">
@@ -926,7 +1160,7 @@ export default function WalkingBooking() {
                       {newChildren.length === 0 && availableChildren.length === 0 && (
                         <div className="py-12 border-2 border-dashed border-slate-100 rounded-[32px] flex flex-col items-center justify-center">
                           <p className="text-ink/20 font-bold mb-4">No participants added</p>
-                          <button onClick={addChildRow} className="bg-brand-blue/5 text-brand-blue px-8 py-3 rounded-full font-black text-sm">Add First Child</button>
+                          <button onClick={addChildRow} className="bg-brand-blue/5 text-brand-blue px-8 py-3 rounded-full font-black text-sm">Add First Member</button>
                         </div>
                       )}
                     </div>
@@ -934,7 +1168,7 @@ export default function WalkingBooking() {
                 </div>
 
                 <div className="mt-16 flex justify-between items-center">
-                  <button onClick={() => setStep(customer ? 1 : 1.5)} className="text-sm font-bold text-ink/40 hover:text-ink px-6">Back</button>
+                  <button onClick={() => setShowAbortModal(true)} className="text-sm font-bold text-ink/40 hover:text-ink px-6">Back</button>
                   <div className="flex flex-col items-end gap-2">
                     {newChildren.length > 0 && (
                       <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-1.5">
@@ -981,11 +1215,11 @@ export default function WalkingBooking() {
                     {classes.map(c => (
                       <div
                         key={c._id}
-                        onClick={() => { 
-                          setSelectedClass(c); 
+                        onClick={() => {
+                          setSelectedClass(c);
                           if (c.activePromotions?.length > 0) setSelectedPromo(c.activePromotions[0]);
                           else setSelectedPromo(null);
-                          setStep(4); 
+                          setStep(4);
                         }}
                         className={`p-8 rounded-[36px] border-2 transition-all bg-white text-left group flex flex-col h-full min-h-[260px] cursor-pointer relative overflow-hidden ${selectedClass?._id === c._id ? 'border-brand-blue shadow-xl bg-brand-blue/5' : c.activePromotions?.length > 0 ? 'border-brand-blue/20 shadow-2xl shadow-brand-blue/5 bg-brand-blue/[0.01]' : 'border-slate-50 hover:border-brand-blue/30 shadow-sm'}`}
                       >
@@ -993,9 +1227,9 @@ export default function WalkingBooking() {
                         {c.activePromotions?.length > 0 && (
                           <div className="absolute top-0 right-0 z-10 pointer-events-none">
                             <div className="bg-brand-blue text-white text-[10px] font-black uppercase tracking-widest py-2 px-10 rotate-45 translate-x-[30%] translate-y-[20%] shadow-lg border-b border-white/20">
-                              {c.activePromotions[0].promoType === 'bogo' ? 'BOGO 1+1' : 
-                               c.activePromotions[0].promoType === 'percentage' ? `${c.activePromotions[0].discountValue}% OFF` :
-                               c.activePromotions[0].promoType === 'flash' ? 'FLASH SALE' : 'OFFER'}
+                              {c.activePromotions[0].promoType === 'bogo' ? 'BOGO 1+1' :
+                                c.activePromotions[0].promoType === 'percentage' ? `${c.activePromotions[0].discountValue}% OFF` :
+                                  c.activePromotions[0].promoType === 'flash' ? 'FLASH SALE' : 'OFFER'}
                             </div>
                           </div>
                         )}
@@ -1019,18 +1253,18 @@ export default function WalkingBooking() {
                             <p className="mt-1 text-[10px] font-black text-brand-blue uppercase tracking-widest">{c.activePromotions[0].name}</p>
                           )}
                           <p className="mt-3 text-sm text-ink/50 line-clamp-2 leading-relaxed max-w-[80%]">{c.description || 'Professional training sessions tailored for progress.'}</p>
-                          
+
                           {/* Promotion Highlight Detail */}
                           {c.activePromotions?.length > 0 && (
                             <div className="mt-4 bg-brand-blue/5 border border-brand-blue/10 p-3 rounded-2xl animate-rise">
-                               <p className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-1">🎁 Promo Highlight</p>
-                               <p className="text-[11px] font-bold text-ink/70 leading-relaxed italic line-clamp-2">
-                                  "{c.activePromotions[0].description || `${c.activePromotions[0].name} - Special pricing applied.`}"
-                               </p>
+                              <p className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-1">🎁 Promo Highlight</p>
+                              <p className="text-[11px] font-bold text-ink/70 leading-relaxed italic line-clamp-2">
+                                "{c.activePromotions[0].description || `${c.activePromotions[0].name} - Special pricing applied.`}"
+                              </p>
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="mt-8 flex items-end justify-between">
                           <div className="flex flex-col">
                             {c.activePromotions?.length > 0 && (
@@ -1080,9 +1314,9 @@ export default function WalkingBooking() {
                         {plan.activePromotions?.length > 0 && (
                           <div className="absolute top-0 right-0 z-10 pointer-events-none">
                             <div className="bg-brand-blue text-white text-[10px] font-black uppercase tracking-widest py-2 px-10 rotate-45 translate-x-[30%] translate-y-[20%] shadow-lg border-b border-white/20">
-                              {plan.activePromotions[0].promoType === 'bogo' ? 'FREE EXTRA' : 
-                               plan.activePromotions[0].promoType === 'percentage' ? `${plan.activePromotions[0].discountValue}% OFF` :
-                               plan.activePromotions[0].promoType === 'cash' ? 'CASH OFF' : 'SPECIAL'}
+                              {plan.activePromotions[0].promoType === 'bogo' ? 'FREE EXTRA' :
+                                plan.activePromotions[0].promoType === 'percentage' ? `${plan.activePromotions[0].discountValue}% OFF` :
+                                  plan.activePromotions[0].promoType === 'cash' ? 'CASH OFF' : 'SPECIAL'}
                             </div>
                           </div>
                         )}
@@ -1127,9 +1361,9 @@ export default function WalkingBooking() {
                           <div className="flex items-center gap-4 mt-3 text-xs font-bold text-ink/40">
                             <span className="flex items-center gap-1.5"><span className="opacity-50">📋</span> {plan.classesIncluded || 'Unlimited'} classes</span>
                             {(plan.durationValue && plan.durationUnit) ? (
-                               <span className="flex items-center gap-1.5"><span className="opacity-50">⏱</span> {plan.durationValue} {plan.durationUnit}</span>
+                              <span className="flex items-center gap-1.5"><span className="opacity-50">⏱</span> {plan.durationValue} {plan.durationUnit}</span>
                             ) : plan.durationWeeks ? (
-                               <span className="flex items-center gap-1.5"><span className="opacity-50">⏱</span> {Math.round(plan.durationWeeks * 10) / 10} weeks</span>
+                              <span className="flex items-center gap-1.5"><span className="opacity-50">⏱</span> {Math.round(plan.durationWeeks * 10) / 10} weeks</span>
                             ) : null}
                           </div>
                           {plan.bonusQuantity > 0 && (
@@ -1142,10 +1376,10 @@ export default function WalkingBooking() {
                           {/* Promotion Highlight Detail */}
                           {plan.activePromotions?.[0] && (
                             <div className="mt-4 bg-brand-blue/5 border border-brand-blue/10 p-3 rounded-2xl animate-rise">
-                               <p className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-1">🔥 Special Offer</p>
-                               <p className="text-[11px] font-bold text-ink/70 leading-relaxed italic line-clamp-2">
-                                  "{plan.activePromotions?.[0].description || `${plan.activePromotions?.[0].name} - Limited time deal.`}"
-                               </p>
+                              <p className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-1">🔥 Special Offer</p>
+                              <p className="text-[11px] font-bold text-ink/70 leading-relaxed italic line-clamp-2">
+                                "{plan.activePromotions?.[0].description || `${plan.activePromotions?.[0].name} - Limited time deal.`}"
+                              </p>
                             </div>
                           )}
                         </div>
@@ -1155,7 +1389,7 @@ export default function WalkingBooking() {
                               <span className="text-[10px] font-bold text-ink/20 line-through">{currency} {plan.price.toLocaleString()}</span>
                             )}
                             <span className={`text-2xl font-black ${plan.activePromotions?.[0] ? 'text-brand-blue' : 'text-brand-blue'}`}>
-                              {plan.activePromotions?.[0] ? Math.round((plan.price - (plan.activePromotions?.[0].discountType === 'percentage' || plan.activePromotions?.[0].promoType === 'percentage' ? (plan.price * (plan.activePromotions?.[0].discountValue / 100)) : Math.min(plan.price, plan.activePromotions?.[0].discountValue))) * 100) / 100 : plan.price.toLocaleString()} 
+                              {plan.activePromotions?.[0] ? Math.round((plan.price - (plan.activePromotions?.[0].discountType === 'percentage' || plan.activePromotions?.[0].promoType === 'percentage' ? (plan.price * (plan.activePromotions?.[0].discountValue / 100)) : Math.min(plan.price, plan.activePromotions?.[0].discountValue))) * 100) / 100 : plan.price.toLocaleString()}
                               <span className="text-xs opacity-50 ml-1">{currency}</span>
                             </span>
                             {plan.activePromotions?.[0]?.promoType === 'bogo' && (
@@ -1295,7 +1529,10 @@ export default function WalkingBooking() {
                   <div className="p-8 rounded-[32px] bg-slate-50">
                     <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-4 px-1">Branch Location</label>
                     <div className="grid gap-4 sm:grid-cols-2">
-                      {locations.map(loc => (
+                      {locations.filter(loc => {
+                        const classLoc = selectedClass?.locationId?._id || selectedClass?.locationId;
+                        return classLoc ? loc._id === classLoc : true;
+                      }).map(loc => (
                         <button
                           key={loc._id}
                           onClick={() => { setSelectedLocation(loc._id); setSelectedTrainer(''); }}
@@ -1316,19 +1553,26 @@ export default function WalkingBooking() {
                       <label className="block text-xs font-black text-ink/40 uppercase tracking-[0.2em] mb-4 px-1">Choose Assigned Trainer</label>
                       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {trainers.map(t => (
-                          <button
+                          <div
                             key={t._id}
+                            className={`p-5 rounded-[24px] border-2 transition-all flex items-center gap-4 group cursor-pointer ${selectedTrainer === t._id ? 'border-brand-blue bg-white shadow-glow' : 'bg-white border-slate-50 hover:border-brand-blue/20'}`}
                             onClick={() => { setSelectedTrainer(t._id); setStep(5); }}
-                            className={`p-5 rounded-[24px] border-2 transition-all flex items-center gap-4 group ${selectedTrainer === t._id ? 'border-brand-blue bg-white shadow-glow' : 'bg-white border-slate-50 hover:border-brand-blue/20'}`}
                           >
                             <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-2xl overflow-hidden shrink-0 group-hover:scale-105 transition-all">
                               {t.avatarUrl ? <img src={getImageUrl(t.avatarUrl)} className="h-full w-full object-cover" /> : '🏆'}
                             </div>
-                            <div className="text-left overflow-hidden">
+                            <div className="text-left overflow-hidden flex-1">
                               <p className="font-black text-base text-ink truncate">{t.name}</p>
                               <p className="text-[10px] text-brand-blue uppercase font-black tracking-widest mt-0.5">{t.specialties?.[0] || 'Fitness Coach'}</p>
                             </div>
-                          </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDetailsTrainer(t); }}
+                              className="p-1.5 rounded-full bg-slate-50 text-ink/30 hover:text-brand-blue hover:bg-brand-blue/5 transition-all"
+                              title="View Details"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </button>
+                          </div>
                         ))}
                         {trainers.length === 0 && (
                           <div className="col-span-full py-10 bg-coral/5 rounded-[32px] border border-coral/10 text-center">
@@ -1349,8 +1593,29 @@ export default function WalkingBooking() {
             {/* STEP 5: SESSIONS */}
             {step === 5 && (
               <div className="animate-rise">
-                <h2 className="font-display text-3xl font-black text-ink mb-2">Available Slots</h2>
-                <p className="text-ink/60 mb-8">{selectedClass?.title} with {trainers.find(t => t._id === selectedTrainer)?.name}</p>
+                <h2 className="font-display text-3xl font-black text-ink mb-6">Available Slots</h2>
+                
+                <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 mb-10 flex flex-col md:flex-row md:items-center gap-6 md:gap-10">
+                  <div className="flex-1">
+                    <p className="text-[10px] font-black uppercase text-ink/40 tracking-widest mb-1.5">Selected Program</p>
+                    <p className="font-display text-xl font-black text-ink">{selectedClass?.title}</p>
+                  </div>
+                  <div className="hidden md:block w-px h-12 bg-slate-200"></div>
+                  <div className="flex-1">
+                    <p className="text-[10px] font-black uppercase text-ink/40 tracking-widest mb-1.5">Assigned Trainer</p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-brand-blue/10 flex items-center justify-center text-sm border border-brand-blue/20">🏆</div>
+                      <p className="text-sm font-black text-brand-blue">{trainers.find(t => t._id === selectedTrainer)?.name || 'Trainer'}</p>
+                    </div>
+                  </div>
+                  <div className="hidden md:block w-px h-12 bg-slate-200"></div>
+                  <div className="flex-1">
+                    <p className="text-[10px] font-black uppercase text-ink/40 tracking-widest mb-1.5">Participant(s)</p>
+                    <p className="text-sm font-bold text-ink/70">
+                      {selectedChildrenIds.map(id => id === 'self' ? (customer?.name || newCustomer.name || 'Self') : availableChildren.find(c => c._id === id)?.name).filter(Boolean).join(', ')}
+                    </p>
+                  </div>
+                </div>
 
                 {dateKeys.length > 0 ? (
                   <div>
@@ -1377,11 +1642,10 @@ export default function WalkingBooking() {
                               if (isSel) setSelectedSessions(selectedSessions.filter(ss => ss._id !== s._id));
                               else { setError(''); setSelectedSessions([...selectedSessions, s]); }
                             }}
-                            className={`p-6 rounded-[32px] border-2 transition-all flex flex-col items-center justify-center gap-1 group relative ${
-                              isSel ? 'border-brand-blue bg-brand-blue/5 text-ink shadow-md'
-                              : left <= 0 ? 'bg-amber-50/80 border-amber-300 hover:border-amber-400 text-ink'
-                              : 'bg-white border-slate-50 hover:border-brand-blue/20'
-                            }`}
+                            className={`p-6 rounded-[32px] border-2 transition-all flex flex-col items-center justify-center gap-1 group relative ${isSel ? 'border-brand-blue bg-brand-blue/5 text-ink shadow-md'
+                                : left <= 0 ? 'bg-amber-50/80 border-amber-300 hover:border-amber-400 text-ink'
+                                  : 'bg-white border-slate-50 hover:border-brand-blue/20'
+                              }`}
                           >
                             {left <= 0 && !isSel && (
                               <span className="absolute -top-2 -right-2 bg-amber-400 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">FULL</span>
@@ -1457,10 +1721,10 @@ export default function WalkingBooking() {
                         <div className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100/50">
                           <p className="text-[10px] font-black uppercase tracking-widest text-ink/30 mb-3">Participants</p>
                           <div className="space-y-2">
-                            {selectedChildrenIds.map(id => availableChildren.find(c => c._id === id)).map((p, i) => (
+                            {selectedChildrenIds.map(id => id === 'self' ? { name: customer?.name || newCustomer.name || 'Self', age: 'Adult' } : availableChildren.find(c => c._id === id)).map((p, i) => (
                               <div key={i} className="flex justify-between items-center text-xs font-bold text-ink/70">
                                 <span>{p?.name}</span>
-                                <span className="text-[10px] opacity-40">{p?.age}Y</span>
+                                <span className="text-[10px] opacity-40">{p?.age === 'Adult' ? 'Adult' : `${p?.age}Y`}</span>
                               </div>
                             ))}
                           </div>
@@ -1476,9 +1740,9 @@ export default function WalkingBooking() {
                               </p>
                               <p className="text-xs font-bold text-ink/70 flex items-center gap-2">
                                 <span className="w-1.5 h-1.5 rounded-full bg-brand-blue"></span>
-                                {(selectedPlan?.durationValue && selectedPlan?.durationUnit) ? 
-                                   `${selectedPlan.durationValue} ${selectedPlan.durationUnit.charAt(0).toUpperCase() + selectedPlan.durationUnit.slice(1)}` 
-                                   : `${Math.round(selectedPlan?.durationWeeks * 10) / 10 || '—'} Weeks`} Access
+                                {(selectedPlan?.durationValue && selectedPlan?.durationUnit) ?
+                                  `${selectedPlan.durationValue} ${selectedPlan.durationUnit.charAt(0).toUpperCase() + selectedPlan.durationUnit.slice(1)}`
+                                  : `${Math.round(selectedPlan?.durationWeeks * 10) / 10 || '—'} Weeks`} Access
                               </p>
                             </div>
                           ) : (
@@ -1499,7 +1763,7 @@ export default function WalkingBooking() {
                           <div className="flex items-baseline gap-1">
                             <span className="text-[10px] font-black text-white/30">{currency}</span>
                             <span className="text-3xl font-display font-black leading-none py-1">
-                               {Math.round((activeTax?.calculationMethod === 'inclusive' ? (currentPrice - discountAmount - couponAmount) : (currentPrice - discountAmount - couponAmount + currentTax)) * 100) / 100}
+                              {Math.round((activeTax?.calculationMethod === 'inclusive' ? (currentPrice - discountAmount - couponAmount) : (currentPrice - discountAmount - couponAmount + currentTax)) * 100) / 100}
                             </span>
                           </div>
                         </div>
@@ -1507,68 +1771,68 @@ export default function WalkingBooking() {
 
                       {/* Full Itemized Order Summary Breakdown */}
                       <div className="mt-10 pt-10 border-t border-slate-100/60">
-                         <div className="flex flex-col lg:flex-row gap-12">
-                            {/* Detailed Bill Rows */}
-                            <div className="flex-1 space-y-4">
-                               <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-ink/30 mb-6 flex items-center gap-3">
-                                  <span className="w-8 h-[1px] bg-brand-blue/30"></span>
-                                  Full Order Summary
-                               </h4>
-                               
-                               <div className="space-y-3 px-2">
-                                  <div className="flex justify-between items-baseline group">
-                                     <span className="text-sm font-bold text-ink/40 group-hover:text-ink transition-colors">Gross Subtotal</span>
-                                     <div className="h-px flex-1 bg-slate-50 border-b border-dashed border-slate-100 mx-4 mb-1"></div>
-                                     <span className="font-display font-black text-ink">
-                                        {currency} {
-                                          (activeTax?.calculationMethod === 'inclusive' 
-                                             ? (activeTax.type === 'percentage' ? currentPrice / (1 + (activeTax.value / 100)) : Math.max(0, currentPrice - activeTax.value)) 
-                                             : currentPrice).toFixed(2)
-                                        }
-                                     </span>
+                        <div className="flex flex-col lg:flex-row gap-12">
+                          {/* Detailed Bill Rows */}
+                          <div className="flex-1 space-y-4">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-ink/30 mb-6 flex items-center gap-3">
+                              <span className="w-8 h-[1px] bg-brand-blue/30"></span>
+                              Full Order Summary
+                            </h4>
+
+                            <div className="space-y-3 px-2">
+                              <div className="flex justify-between items-baseline group">
+                                <span className="text-sm font-bold text-ink/40 group-hover:text-ink transition-colors">Gross Subtotal</span>
+                                <div className="h-px flex-1 bg-slate-50 border-b border-dashed border-slate-100 mx-4 mb-1"></div>
+                                <span className="font-display font-black text-ink">
+                                  {currency} {
+                                    (activeTax?.calculationMethod === 'inclusive'
+                                      ? (activeTax.type === 'percentage' ? currentPrice / (1 + (activeTax.value / 100)) : Math.max(0, currentPrice - activeTax.value))
+                                      : currentPrice).toFixed(2)
+                                  }
+                                </span>
+                              </div>
+
+                              {discountAmount > 0 && (
+                                <div className="flex justify-between items-center bg-emerald-50/50 p-4 rounded-[24px] border border-emerald-100/30 group animate-rise">
+                                  <div className="flex items-center gap-3">
+                                    <span className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-base shadow-sm ring-1 ring-emerald-100">🏷️</span>
+                                    <div>
+                                      <p className="text-[9px] font-black uppercase text-emerald-800/40 leading-none mb-1">Applied Promo</p>
+                                      <p className="text-[11px] font-black text-emerald-700 truncate max-w-[180px]">{selectedPromo?.name}</p>
+                                    </div>
                                   </div>
+                                  <span className="font-display text-lg font-black text-emerald-600">- {currency} {discountAmount.toFixed(2)}</span>
+                                </div>
+                              )}
 
-                                  {discountAmount > 0 && (
-                                     <div className="flex justify-between items-center bg-emerald-50/50 p-4 rounded-[24px] border border-emerald-100/30 group animate-rise">
-                                        <div className="flex items-center gap-3">
-                                           <span className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-base shadow-sm ring-1 ring-emerald-100">🏷️</span>
-                                           <div>
-                                              <p className="text-[9px] font-black uppercase text-emerald-800/40 leading-none mb-1">Applied Promo</p>
-                                              <p className="text-[11px] font-black text-emerald-700 truncate max-w-[180px]">{selectedPromo?.name}</p>
-                                           </div>
-                                        </div>
-                                        <span className="font-display text-lg font-black text-emerald-600">- {currency} {discountAmount.toFixed(2)}</span>
-                                     </div>
-                                  )}
+                              {couponAmount > 0 && (
+                                <div className="flex justify-between items-center bg-brand-blue/5 p-4 rounded-[24px] border border-brand-blue/10 group animate-rise">
+                                  <div className="flex items-center gap-3">
+                                    <span className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-base shadow-sm ring-1 ring-brand-blue/10">🎟️</span>
+                                    <div>
+                                      <p className="text-[9px] font-black uppercase text-brand-blue/40 leading-none mb-1">Voucher Discount</p>
+                                      <p className="text-[11px] font-black text-brand-blue">Direct Credit</p>
+                                    </div>
+                                  </div>
+                                  <span className="font-display text-lg font-black text-brand-blue">- {currency} {couponAmount.toFixed(2)}</span>
+                                </div>
+                              )}
 
-                                  {couponAmount > 0 && (
-                                     <div className="flex justify-between items-center bg-brand-blue/5 p-4 rounded-[24px] border border-brand-blue/10 group animate-rise">
-                                        <div className="flex items-center gap-3">
-                                           <span className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-base shadow-sm ring-1 ring-brand-blue/10">🎟️</span>
-                                           <div>
-                                              <p className="text-[9px] font-black uppercase text-brand-blue/40 leading-none mb-1">Voucher Discount</p>
-                                              <p className="text-[11px] font-black text-brand-blue">Direct Credit</p>
-                                           </div>
-                                        </div>
-                                        <span className="font-display text-lg font-black text-brand-blue">- {currency} {couponAmount.toFixed(2)}</span>
-                                     </div>
-                                  )}
-
-                                  {currentTax > 0 && (
-                                     <div className="flex justify-between items-baseline group pt-2">
-                                        <span className="text-sm font-bold text-ink/40 group-hover:text-ink transition-colors">
-                                          {activeTax?.name || 'VAT'} {activeTax?.type === 'percentage' ? `(${activeTax?.value}%)` : ''} 
-                                          {activeTax?.calculationMethod === 'inclusive' && <span className="text-[9px] uppercase ml-1">(Included)</span>}
-                                        </span>
-                                        <div className="h-px flex-1 bg-slate-50 border-b border-dashed border-slate-100 mx-4 mb-1"></div>
-                                        <span className="font-display font-black text-ink/50">
-                                          {activeTax?.calculationMethod === 'inclusive' ? '' : '+ '}{currency} {currentTax.toFixed(2)}
-                                        </span>
-                                     </div>
-                                  )}
-                               </div>
+                              {currentTax > 0 && (
+                                <div className="flex justify-between items-baseline group pt-2">
+                                  <span className="text-sm font-bold text-ink/40 group-hover:text-ink transition-colors">
+                                    {activeTax?.name || 'VAT'} {activeTax?.type === 'percentage' ? `(${activeTax?.value}%)` : ''}
+                                    {activeTax?.calculationMethod === 'inclusive' && <span className="text-[9px] uppercase ml-1">(Included)</span>}
+                                  </span>
+                                  <div className="h-px flex-1 bg-slate-50 border-b border-dashed border-slate-100 mx-4 mb-1"></div>
+                                  <span className="font-display font-black text-ink/50">
+                                    {activeTax?.calculationMethod === 'inclusive' ? '' : '+ '}{currency} {currentTax.toFixed(2)}
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                         </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -1602,70 +1866,70 @@ export default function WalkingBooking() {
                       <div className="flex flex-col md:flex-row gap-10 items-start md:items-center">
                         <div className="flex-1 space-y-4">
                           <div className="flex items-center gap-4">
-                             <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-2xl">
-                               {selectedPromo?.promoType === 'bogo' ? '🎁' : '📝'}
-                             </div>
-                             <div>
-                               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 mb-0.5">Step 2: Review & Finalize order</p>
-                               <h2 className="font-display text-2xl font-black text-white">
-                                 {selectedPromo?.promoType === 'bogo' ? 'Claim Your BOGO Bonus' : 'Check Summary & Proceed'}
-                               </h2>
-                             </div>
+                            <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-2xl">
+                              {selectedPromo?.promoType === 'bogo' ? '🎁' : '📝'}
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 mb-0.5">Step 2: Review & Finalize order</p>
+                              <h2 className="font-display text-2xl font-black text-white">
+                                {selectedPromo?.promoType === 'bogo' ? 'Claim Your BOGO Bonus' : 'Check Summary & Proceed'}
+                              </h2>
+                            </div>
                           </div>
-                          
+
                           <div className="min-h-[100px]">
                             {selectedPromo?.promoType === 'bogo' ? (
-                               <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 animate-in zoom-in-95 duration-500">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                     {selectedChildrenIds.length > 0 && bookingMode === 'package' && (
-                                       <button
-                                         onClick={() => {
-                                           setBogoOption('double');
-                                           if (selectedChildrenIds.length > 1) setSelectedChildrenIds([selectedChildrenIds[0]]);
-                                         }}
-                                         className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 text-left ${bogoOption === 'double' && selectedChildrenIds.length === 1 ? 'border-emerald-500 bg-emerald-500/10' : 'border-white/5 bg-white/5 hover:border-white/20'}`}
-                                       >
-                                         <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white text-lg">⚡</div>
-                                         <div>
-                                           <p className="font-black text-white text-[10px] uppercase tracking-wide">Double sessions</p>
-                                           <p className="text-[9px] font-bold text-white/40 uppercase">For {availableChildren.find(c => c._id === selectedChildrenIds[0])?.name}</p>
-                                         </div>
-                                       </button>
-                                     )}
+                              <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 animate-in zoom-in-95 duration-500">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {selectedChildrenIds.length > 0 && bookingMode === 'package' && (
+                                    <button
+                                      onClick={() => {
+                                        setBogoOption('double');
+                                        if (selectedChildrenIds.length > 1) setSelectedChildrenIds([selectedChildrenIds[0]]);
+                                      }}
+                                      className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 text-left ${bogoOption === 'double' && selectedChildrenIds.length === 1 ? 'border-emerald-500 bg-emerald-500/10' : 'border-white/5 bg-white/5 hover:border-white/20'}`}
+                                    >
+                                      <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white text-lg">⚡</div>
+                                      <div>
+                                        <p className="font-black text-white text-[10px] uppercase tracking-wide">Double sessions</p>
+                                        <p className="text-[9px] font-bold text-white/40 uppercase">For {availableChildren.find(c => c._id === selectedChildrenIds[0])?.name}</p>
+                                      </div>
+                                    </button>
+                                  )}
 
-                                     {availableChildren.filter(child => !selectedChildrenIds.includes(child._id)).map(child => (
-                                       <button
-                                         key={child._id}
-                                         onClick={() => { setBogoOption('person'); handleQuickAddChildSummary(child._id); }}
-                                         className="p-4 rounded-2xl border-2 border-white/5 bg-white/5 hover:border-white/20 transition-all flex items-center gap-4 text-left"
-                                       >
-                                         <div className="w-10 h-10 rounded-xl bg-brand-blue flex items-center justify-center text-white text-lg">➕</div>
-                                         <p className="font-black text-white text-[10px] uppercase tracking-wide">Add {child.name} for Free</p>
-                                       </button>
-                                     ))}
-                                  </div>
-                               </div>
+                                  {availableChildren.filter(child => !selectedChildrenIds.includes(child._id)).map(child => (
+                                    <button
+                                      key={child._id}
+                                      onClick={() => { setBogoOption('person'); handleQuickAddChildSummary(child._id); }}
+                                      className="p-4 rounded-2xl border-2 border-white/5 bg-white/5 hover:border-white/20 transition-all flex items-center gap-4 text-left"
+                                    >
+                                      <div className="w-10 h-10 rounded-xl bg-brand-blue flex items-center justify-center text-white text-lg">➕</div>
+                                      <p className="font-black text-white text-[10px] uppercase tracking-wide">Add {child.name} for Free</p>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
                             ) : (
-                               <p className="text-[11px] font-bold text-white/30 leading-relaxed max-w-md bg-white/5 p-6 rounded-3xl border border-white/5">
-                                 Your order summary looks perfect. We've applied all active discounts and calculated the accurate tax breakdown. Proceed below to choose your payment method.
-                               </p>
+                              <p className="text-[11px] font-bold text-white/30 leading-relaxed max-w-md bg-white/5 p-6 rounded-3xl border border-white/5">
+                                Your order summary looks perfect. We've applied all active discounts and calculated the accurate tax breakdown. Proceed below to choose your payment method.
+                              </p>
                             )}
                           </div>
                         </div>
 
                         <div className="w-full md:w-[320px] shrink-0 space-y-4">
-                           <button
-                             onClick={() => setStep(7)}
-                             className="w-full bg-brand-blue text-white py-6 rounded-[32px] font-display text-xl font-black shadow-xl shadow-brand-blue/20 hover:scale-[1.03] active:scale-[0.97] transition-all flex items-center justify-center gap-3"
-                           >
-                             Finalize & Pay <span>➔</span>
-                           </button>
-                           <button
-                             onClick={() => setStep(bookingMode === 'package' ? 3 : 5)}
-                             className="w-full py-2 text-[10px] font-black text-white/20 hover:text-white/60 transition-colors uppercase tracking-[0.2em]"
-                           >
-                             🔙 Back to {bookingMode === 'package' ? 'Branch' : 'Schedule'}
-                           </button>
+                          <button
+                            onClick={() => setStep(7)}
+                            className="w-full bg-brand-blue text-white py-6 rounded-[32px] font-display text-xl font-black shadow-xl shadow-brand-blue/20 hover:scale-[1.03] active:scale-[0.97] transition-all flex items-center justify-center gap-3"
+                          >
+                            Finalize & Pay <span>➔</span>
+                          </button>
+                          <button
+                            onClick={() => setStep(bookingMode === 'package' ? 3 : 5)}
+                            className="w-full py-2 text-[10px] font-black text-white/20 hover:text-white/60 transition-colors uppercase tracking-[0.2em]"
+                          >
+                            🔙 Back to {bookingMode === 'package' ? 'Branch' : 'Schedule'}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1691,7 +1955,7 @@ export default function WalkingBooking() {
                         <div className="flex flex-col items-center justify-center border-b border-slate-100 pb-10 mb-10">
                           <p className="text-[10px] font-black text-brand-blue uppercase tracking-[0.3em] mb-3">Amount to be Paid</p>
                           <h2 className="font-display text-7xl font-black text-ink">
-                             {currency} {Math.round((activeTax?.calculationMethod === 'inclusive' ? (currentPrice - discountAmount - couponAmount) : (currentPrice - discountAmount - couponAmount + currentTax)) * 100) / 100}
+                            {currency} {Math.round((activeTax?.calculationMethod === 'inclusive' ? (currentPrice - discountAmount - couponAmount) : (currentPrice - discountAmount - couponAmount + currentTax)) * 100) / 100}
                           </h2>
                         </div>
 
@@ -1699,11 +1963,11 @@ export default function WalkingBooking() {
                           <div className="flex justify-between items-center text-sm">
                             <span className="text-ink/40 font-bold uppercase tracking-widest text-[10px]">Subtotal (Excl. Tax)</span>
                             <span className="font-black text-ink">
-                               {currency} {
-                                 (activeTax?.calculationMethod === 'inclusive' 
-                                    ? (activeTax.type === 'percentage' ? currentPrice / (1 + (activeTax.value / 100)) : Math.max(0, currentPrice - activeTax.value)) 
-                                    : currentPrice).toFixed(2)
-                               }
+                              {currency} {
+                                (activeTax?.calculationMethod === 'inclusive'
+                                  ? (activeTax.type === 'percentage' ? currentPrice / (1 + (activeTax.value / 100)) : Math.max(0, currentPrice - activeTax.value))
+                                  : currentPrice).toFixed(2)
+                              }
                             </span>
                           </div>
                           {currentTax > 0 && (
@@ -1726,8 +1990,7 @@ export default function WalkingBooking() {
                             </div>
                           )}
                         </div>
-
-                        <div className="grid md:grid-cols-2 gap-10 mt-10">
+                        <div className="flex flex-col gap-8 mt-10 border-t border-slate-100 pt-8">
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-ink/30 mb-4">Transaction Components</p>
                             <div className="space-y-4">
@@ -1737,8 +2000,8 @@ export default function WalkingBooking() {
                               </div>
                               {membershipUnits > 1 && (
                                 <div className="flex justify-between text-[10px] font-black text-ocean uppercase tracking-widest pt-1">
-                                   <span>Volume Multiplier ({membershipUnits}x)</span>
-                                   <span>Included</span>
+                                  <span>Volume Multiplier ({membershipUnits}x)</span>
+                                  <span>Included</span>
                                 </div>
                               )}
                               {discountAmount > 0 && (
@@ -1747,12 +2010,12 @@ export default function WalkingBooking() {
                                   <span>- {currency} {discountAmount}</span>
                                 </div>
                               )}
-                              {couponAmount > 0 && (
-                                <div className="flex justify-between text-sm font-black text-indigo-600">
-                                  <span>Coupon Applied ({couponCode})</span>
-                                  <span>- {currency} {couponAmount}</span>
+                              {appliedCoupons.map((c, i) => (
+                                <div key={i} className="flex justify-between text-sm font-black text-indigo-600">
+                                  <span>Coupon Applied ({c.code})</span>
+                                  <span>- {currency} {c.amount}</span>
                                 </div>
-                              )}
+                              ))}
                               {currentTax > 0 && (
                                 <div className="flex justify-between text-sm font-black text-brand-blue">
                                   <span>{activeTax?.name || 'Tax'} ({activeTax?.calculationMethod})</span>
@@ -1767,42 +2030,67 @@ export default function WalkingBooking() {
                             </div>
                           </div>
 
-                          <div>
+                          <div className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
                             <p className="text-[10px] font-black uppercase tracking-widest text-ink/30 mb-4">Coupon Redemption</p>
+                            
+                            {appliedCoupons.length > 0 && (
+                              <div className="mb-4 space-y-2">
+                                {appliedCoupons.map((c, i) => (
+                                  <div key={i} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200">
+                                    <div>
+                                      <span className="text-xs font-black uppercase">{c.code}</span>
+                                      <span className="text-[10px] text-brand-blue font-bold ml-2">-{currency}{c.amount}</span>
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        const newCoupons = [...appliedCoupons];
+                                        newCoupons.splice(i, 1);
+                                        setAppliedCoupons(newCoupons);
+                                        setCouponAmount(newCoupons.reduce((sum, cp) => sum + cp.amount, 0));
+                                      }}
+                                      className="text-red-500 text-[10px] font-bold"
+                                    >Remove</button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
                             <div className="flex gap-2">
-                              <input 
+                              <input
                                 type="text"
-                                className="flex-1 bg-slate-50 border-none rounded-xl py-3 px-4 text-xs font-black uppercase tracking-widest placeholder:text-ink/10 outline-none focus:ring-2 focus:ring-brand-blue/20"
+                                className="flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-black uppercase tracking-widest placeholder:text-ink/20 outline-none focus:ring-2 focus:ring-brand-blue/20"
                                 placeholder="Enter Code (e.g. CPN-XXXX)"
                                 value={couponCode}
                                 onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                                disabled={couponAmount > 0 || isValidatingCoupon}
+                                disabled={isValidatingCoupon}
                               />
-                              {couponAmount > 0 ? (
-                                <button 
-                                  onClick={() => { setCouponAmount(0); setCouponCode(''); }}
-                                  className="bg-red-50 text-red-500 px-4 py-2 rounded-xl text-[10px] font-black uppercase"
-                                >Remove</button>
-                              ) : (
-                                <button 
-                                  onClick={async () => {
-                                    setIsValidatingCoupon(true);
-                                    try {
-                                      const res = await api.post('/coupons/validate', { code: couponCode });
-                                      setCouponAmount(res.data.data.amount);
-                                      toast.success('Coupon applied!');
-                                    } catch (err) {
-                                      toast.error(err.response?.data?.message || 'Invalid coupon');
-                                    } finally {
-                                      setIsValidatingCoupon(false);
+                              <button
+                                onClick={async () => {
+                                  setIsValidatingCoupon(true);
+                                  try {
+                                    if (appliedCoupons.find(c => c.code === couponCode)) {
+                                      toast.error('Coupon already applied');
+                                      return;
                                     }
-                                  }}
-                                  disabled={!couponCode || isValidatingCoupon}
-                                  className="bg-brand-blue text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase disabled:opacity-50"
-                                >Apply</button>
-                              )}
+                                    const res = await api.post('/coupons/validate', { code: couponCode });
+                                    const amount = res.data.data ? res.data.data.amount : res.data.amount;
+                                    const newCoupon = { code: couponCode, amount: amount };
+                                    const newCoupons = [...appliedCoupons, newCoupon];
+                                    setAppliedCoupons(newCoupons);
+                                    setCouponAmount(newCoupons.reduce((sum, cp) => sum + cp.amount, 0));
+                                    setCouponCode('');
+                                    toast.success('Coupon applied!');
+                                  } catch (err) {
+                                    toast.error(err.response?.data?.message || 'Invalid coupon');
+                                  } finally {
+                                    setIsValidatingCoupon(false);
+                                  }
+                                }}
+                                disabled={!couponCode || isValidatingCoupon}
+                                className="bg-brand-blue text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase disabled:opacity-50"
+                              >Add</button>
                             </div>
-                            <p className="mt-3 text-[9px] font-bold text-ink/30 leading-relaxed uppercase tracking-tighter">Enter a valid cash voucher code to reduce the final amount.</p>
+                            <p className="mt-3 text-[9px] font-bold text-ink/30 leading-relaxed uppercase tracking-tighter">Enter valid cash voucher codes to reduce the final amount. You can stack multiple vouchers.</p>
                           </div>
                         </div>
                       </div>
@@ -1817,30 +2105,184 @@ export default function WalkingBooking() {
                         <h2 className="font-display text-3xl font-black text-white px-2">Finalize Payment</h2>
                       </div>
 
+                      {vendors.length > 0 && (
+                        <div className="mb-8 p-5 bg-white/5 rounded-[32px] border border-white/10">
+                          <label className="flex items-center gap-3 cursor-pointer group mb-2">
+                            <input
+                              type="checkbox"
+                              className="w-5 h-5 rounded-md border-2 border-white/20 bg-transparent text-brand-blue focus:ring-brand-blue cursor-pointer"
+                              checked={isVendorSale}
+                              onChange={(e) => {
+                                setIsVendorSale(e.target.checked);
+                                if (!e.target.checked) setSelectedVendorId('');
+                              }}
+                            />
+                            <span className="text-xs font-black uppercase tracking-widest text-white/70 group-hover:text-white transition-colors">Process as Vendor Sale</span>
+                          </label>
+
+                          {isVendorSale && (
+                            <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                              <select
+                                className="w-full bg-ink border border-white/20 rounded-2xl p-4 text-sm font-bold text-white outline-none focus:border-brand-blue"
+                                value={selectedVendorId}
+                                onChange={(e) => setSelectedVendorId(e.target.value)}
+                              >
+                                <option value="" className="text-white bg-ink">Select Vendor...</option>
+                                {vendors.map(v => (
+                                  <option key={v._id} value={v._id} className="text-white bg-ink">{v.name} {v.companyName ? `(${v.companyName})` : ''}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="space-y-3 mb-10">
-                        {['cash', 'card', 'online'].map((mode) => (
-                          <button
-                            key={mode}
-                            onClick={() => setPaymentMethod(mode)}
-                            className={`w-full p-6 rounded-[32px] border-2 transition-all flex items-center justify-between group ${paymentMethod === mode ? 'border-brand-blue bg-white/10' : 'border-white/5 bg-white/5 hover:border-white/20'}`}
-                          >
-                            <div className="flex items-center gap-5">
-                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl transition-all ${paymentMethod === mode ? 'bg-brand-blue text-white' : 'bg-white/5 text-white/30 group-hover:text-white'}`}>
-                                {mode === 'cash' ? '💵' : mode === 'card' ? '💳' : '🌐'}
+                        {availablePaymentMethods.map((mode) => {
+                          const isSelected = paymentMethods.includes(mode);
+                          return (
+                            <button
+                              key={mode}
+                              onClick={() => {
+                                if (isSelected) {
+                                  if (paymentMethods.length > 1) {
+                                    setPaymentMethods(paymentMethods.filter(m => m !== mode));
+                                  }
+                                } else {
+                                  setPaymentMethods([...paymentMethods, mode]);
+                                }
+                              }}
+                              className={`w-full p-6 rounded-[32px] border-2 transition-all flex items-center justify-between group ${isSelected ? 'border-brand-blue bg-white/10' : 'border-white/5 bg-white/5 hover:border-white/20'}`}
+                            >
+                              <div className="flex items-center gap-5">
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl transition-all ${isSelected ? 'bg-brand-blue text-white' : 'bg-white/5 text-white/30 group-hover:text-white'}`}>
+                                  {mode === 'cash' ? '💵' : mode === 'card' ? '💳' : mode === 'coupon' ? '🎫' : mode === 'voucher' ? '🎟️' : '🌐'}
+                                </div>
+                                <span className="font-black uppercase tracking-widest text-xs">{mode}</span>
                               </div>
-                              <span className="font-black uppercase tracking-widest text-xs">{mode}</span>
-                            </div>
-                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${paymentMethod === mode ? 'border-brand-blue border-brand-blue text-white shadow-lg' : 'border-white/10'}`}>
-                              {paymentMethod === mode && '✓'}
-                            </div>
-                          </button>
-                        ))}
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-brand-blue text-white shadow-lg' : 'border-white/10'}`}>
+                                {isSelected && '✓'}
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
+
+                      {paymentMethods.length === 1 && paymentMethods[0] === 'cash' && (
+                        <div className="mb-10 p-5 bg-white/5 rounded-[32px] border border-white/10 animate-in fade-in slide-in-from-top-2">
+                          <label className="block text-xs font-black text-white/40 uppercase tracking-[0.2em] mb-3 px-1">Cash Received (AED)</label>
+                          <input
+                            type="number"
+                            className="w-full bg-ink border border-white/20 rounded-2xl py-4 px-5 text-xl font-black text-emerald-400 focus:ring-2 focus:ring-brand-blue outline-none placeholder:text-white/20"
+                            placeholder="e.g. 500"
+                            value={cashReceived}
+                            onChange={(e) => setCashReceived(e.target.value)}
+                          />
+                          {Number(cashReceived) > 0 && (
+                            <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center px-1">
+                              <span className="text-xs font-bold text-white/40 uppercase tracking-widest">Change Due:</span>
+                              <span className={`text-xl font-black ${(Number(cashReceived) - (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))) >= 0 ? 'text-brand-blue' : 'text-rose-500'}`}>
+                                {currency} {Math.max(0, Number(cashReceived) - (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))).toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+                          {Number(cashReceived) > 0 && Number(cashReceived) < (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax)) && (
+                            <p className="mt-2 text-[10px] font-bold text-rose-500 flex justify-center">Insufficient cash received!</p>
+                          )}
+                        </div>
+                      )}
+
+                      {paymentMethods.length > 1 && (
+                        <div className="mb-10 p-5 bg-white/5 rounded-[32px] border border-white/10 animate-in fade-in slide-in-from-top-2 space-y-4">
+                          <p className="text-xs font-black text-white/40 uppercase tracking-widest px-1">Allocate Amounts</p>
+
+                          {paymentMethods.includes('cash') && (
+                            <div>
+                              <label className="block text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 px-1">Cash Portion (AED)</label>
+                              <input
+                                type="number"
+                                className="w-full bg-ink border border-white/20 rounded-xl py-3 px-4 text-sm font-bold text-emerald-400 focus:ring-2 focus:ring-brand-blue outline-none"
+                                placeholder="0"
+                                value={splitAmounts.cash}
+                                onChange={(e) => setSplitAmounts({ ...splitAmounts, cash: e.target.value })}
+                              />
+                            </div>
+                          )}
+
+                          {paymentMethods.includes('card') && (
+                            <div>
+                              <label className="block text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 px-1">Card Portion (AED)</label>
+                              <input
+                                type="number"
+                                className="w-full bg-ink border border-white/20 rounded-xl py-3 px-4 text-sm font-bold text-white focus:ring-2 focus:ring-brand-blue outline-none"
+                                placeholder="0"
+                                value={splitAmounts.card}
+                                onChange={(e) => setSplitAmounts({ ...splitAmounts, card: e.target.value })}
+                              />
+                            </div>
+                          )}
+
+                          {paymentMethods.includes('online') && (
+                            <div>
+                              <label className="block text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 px-1">Online Portion (AED)</label>
+                              <input
+                                type="number"
+                                className="w-full bg-ink border border-white/20 rounded-xl py-3 px-4 text-sm font-bold text-white focus:ring-2 focus:ring-brand-blue outline-none"
+                                placeholder="0"
+                                value={splitAmounts.online}
+                                onChange={(e) => setSplitAmounts({ ...splitAmounts, online: e.target.value })}
+                              />
+                            </div>
+                          )}
+
+                          <div className="mt-4 pt-4 border-t border-white/10">
+                            <div className="flex justify-between items-center px-1 mb-2">
+                              <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Total Split:</span>
+                              <span className="text-sm font-black text-white">
+                                {currency} {((paymentMethods.includes('cash') ? Number(splitAmounts.cash) : 0) + (paymentMethods.includes('card') ? Number(splitAmounts.card) : 0) + (paymentMethods.includes('online') ? Number(splitAmounts.online) : 0)).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center px-1 mb-4">
+                              <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Total Required:</span>
+                              <span className="text-sm font-black text-white">
+                                {currency} {(activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax)).toFixed(2)}
+                              </span>
+                            </div>
+
+                            {paymentMethods.includes('cash') && (Number(splitAmounts.cash) > 0) && (
+                              <div className="bg-black/20 p-3 rounded-xl border border-white/5 mt-4">
+                                <label className="block text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 px-1">Cash Actually Received</label>
+                                <input
+                                  type="number"
+                                  className="w-full bg-ink border border-white/20 rounded-xl py-2 px-3 text-sm font-bold text-emerald-400 focus:ring-2 focus:ring-brand-blue outline-none"
+                                  placeholder="e.g. 500"
+                                  value={cashReceived}
+                                  onChange={(e) => setCashReceived(e.target.value)}
+                                />
+                                {Number(cashReceived) > 0 && (
+                                  <div className="mt-2 flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Change Due:</span>
+                                    <span className={`text-sm font-black ${(Number(cashReceived) - Number(splitAmounts.cash)) >= 0 ? 'text-brand-blue' : 'text-rose-500'}`}>
+                                      {currency} {Math.max(0, Number(cashReceived) - Number(splitAmounts.cash)).toFixed(2)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="space-y-4">
                         <button
                           onClick={bookingMode === 'package' ? handlePackagePurchase : handleFinalBooking}
-                          disabled={loading || !paymentMethod}
+                          disabled={
+                            loading ||
+                            paymentMethods.length === 0 ||
+                            (paymentMethods.length === 1 && paymentMethods[0] === 'cash' && Number(cashReceived) < (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))) ||
+                            (paymentMethods.length > 1 && ((paymentMethods.includes('cash') ? Number(splitAmounts.cash) : 0) + (paymentMethods.includes('card') ? Number(splitAmounts.card) : 0) + (paymentMethods.includes('online') ? Number(splitAmounts.online) : 0)).toFixed(2) !== (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax)).toFixed(2)) ||
+                            (paymentMethods.length > 1 && paymentMethods.includes('cash') && Number(splitAmounts.cash) > 0 && Number(cashReceived) > 0 && Number(cashReceived) < Number(splitAmounts.cash))
+                          }
                           className="w-full bg-brand-blue text-white py-6 rounded-[32px] font-display text-xl font-black shadow-xl shadow-brand-blue/20 hover:scale-[1.03] active:scale-[0.97] transition-all disabled:opacity-50"
                         >
                           {loading ? 'Finalizing...' : (bookingMode === 'package' ? 'Purchase Membership' : 'Confirm & Buy')}
@@ -1884,7 +2326,7 @@ export default function WalkingBooking() {
                           <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">✨</div>
                           <div>
                             <h4 className="font-display text-lg font-black text-ink">{selectedPlan?.name || selectedClass?.title}</h4>
-                            <p className="text-[10px] font-bold text-indigo-600/60 uppercase tracking-widest mt-1">{currency} {Math.round((activeTax?.calculationMethod === 'inclusive' ? (currentPrice - discountAmount - couponAmount) : (currentPrice - discountAmount - couponAmount + currentTax)) * 100) / 100} • {paymentMethod.toUpperCase()}</p>
+                            <p className="text-[10px] font-bold text-indigo-600/60 uppercase tracking-widest mt-1">{currency} {Math.round((activeTax?.calculationMethod === 'inclusive' ? (currentPrice - discountAmount - couponAmount) : (currentPrice - discountAmount - couponAmount + currentTax)) * 100) / 100} • {(paymentMethods.length > 1 ? 'split' : paymentMethods[0]).toUpperCase()}</p>
                           </div>
                         </div>
                       </div>
@@ -1921,13 +2363,6 @@ export default function WalkingBooking() {
                               >
                                 View Invoice
                               </button>
-                              <button
-                                onClick={() => window.print()}
-                                className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-lg hover:bg-brand-blue hover:text-white hover:border-brand-blue transition-all"
-                                title="Download Local Copy"
-                              >
-                                💾
-                              </button>
                             </div>
                           </div>
                         ))}
@@ -1963,7 +2398,7 @@ export default function WalkingBooking() {
                       <div className="mt-12 pt-8 border-t border-white/5 space-y-4">
                         <div className="flex items-center justify-between text-white/40">
                           <span className="text-[10px] font-black uppercase tracking-widest">Transaction Mode</span>
-                          <span className="text-[10px] font-black uppercase">{paymentMethod}</span>
+                          <span className="text-[10px] font-black uppercase">{(paymentMethods.length > 1 ? 'split' : paymentMethods[0])}</span>
                         </div>
                         <div className="flex items-center justify-between text-white/40">
                           <span className="text-[10px] font-black uppercase tracking-widest">Handled By</span>
@@ -2041,9 +2476,9 @@ export default function WalkingBooking() {
                     <div className="rounded-2xl bg-slate-50 p-5">
                       <p className="text-[10px] font-black uppercase text-ink/30 mb-1 tracking-widest">Duration</p>
                       <p className="text-lg font-black text-ink">
-                         {(detailsPlan.durationValue && detailsPlan.durationUnit) ? 
-                            `${detailsPlan.durationValue} ${detailsPlan.durationUnit.charAt(0).toUpperCase() + detailsPlan.durationUnit.slice(1)}` 
-                            : (detailsPlan.durationWeeks ? `${Math.round(detailsPlan.durationWeeks * 10) / 10} Weeks` : '—')}
+                        {(detailsPlan.durationValue && detailsPlan.durationUnit) ?
+                          `${detailsPlan.durationValue} ${detailsPlan.durationUnit.charAt(0).toUpperCase() + detailsPlan.durationUnit.slice(1)}`
+                          : (detailsPlan.durationWeeks ? `${Math.round(detailsPlan.durationWeeks * 10) / 10} Weeks` : '—')}
                       </p>
                     </div>
                   </>
@@ -2051,16 +2486,16 @@ export default function WalkingBooking() {
               </div>
 
               {detailsPlan?.bonusQuantity > 0 && (
-                 <div className="flex items-center gap-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-100 animate-in slide-in-from-bottom-2 duration-300">
-                    <span className="text-3xl">🎁</span>
-                    <div>
-                       <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Bonus Reward Included</p>
-                       <p className="text-lg font-black text-ink">{detailsPlan.bonusQuantity} Free {detailsPlan.bonusQuantity === 1 ? 'Class' : 'Classes'}!</p>
-                       <p className="text-[10px] font-bold text-ink/50 mt-1">
-                          The member will receive these bonus sessions automatically.
-                       </p>
-                    </div>
-                 </div>
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-100 animate-in slide-in-from-bottom-2 duration-300">
+                  <span className="text-3xl">🎁</span>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Bonus Reward Included</p>
+                    <p className="text-lg font-black text-ink">{detailsPlan.bonusQuantity} Free {detailsPlan.bonusQuantity === 1 ? 'Class' : 'Classes'}!</p>
+                    <p className="text-[10px] font-bold text-ink/50 mt-1">
+                      The member will receive these bonus sessions automatically.
+                    </p>
+                  </div>
+                </div>
               )}
 
               {/* Benefits / Info */}
@@ -2149,6 +2584,60 @@ export default function WalkingBooking() {
         </div>
       )}
 
+      {/* ── Trainer Details Modal ── */}
+      {detailsTrainer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm animate-fade-in" onClick={() => setDetailsTrainer(null)}>
+          <div className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-rise" onClick={(e) => e.stopPropagation()}>
+            <div className="relative p-8 text-white bg-gradient-to-br from-brand-blue to-ocean">
+              <button onClick={() => setDetailsTrainer(null)} className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white font-black transition-all border border-white/10">×</button>
+              
+              <div className="flex items-center gap-6">
+                <div className="w-24 h-24 rounded-[2rem] bg-white/20 flex items-center justify-center text-4xl overflow-hidden shrink-0 border-2 border-white/30 shadow-inner">
+                  {detailsTrainer.avatarUrl ? <img src={getImageUrl(detailsTrainer.avatarUrl)} className="h-full w-full object-cover" /> : '🏆'}
+                </div>
+                <div>
+                  <h2 className="font-display text-3xl font-black">{detailsTrainer.name}</h2>
+                  <p className="mt-1 text-white/80 text-sm font-bold uppercase tracking-widest">
+                    {detailsTrainer.specialties?.[0] || 'Fitness Coach'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 space-y-6">
+              {detailsTrainer.bio && (
+                <div>
+                  <p className="text-[10px] font-black uppercase text-ink/30 mb-2 tracking-widest">About</p>
+                  <p className="text-sm font-medium text-ink/70 leading-relaxed">{detailsTrainer.bio}</p>
+                </div>
+              )}
+              
+              {detailsTrainer.specialties?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black uppercase text-ink/30 mb-3 tracking-widest">Specialties</p>
+                  <div className="flex flex-wrap gap-2">
+                    {detailsTrainer.specialties.map((s, i) => (
+                      <span key={i} className="px-3 py-1.5 rounded-xl bg-brand-blue/5 text-brand-blue text-xs font-black">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-6 border-t border-slate-100">
+                <button
+                  onClick={() => { setSelectedTrainer(detailsTrainer._id); setStep(5); setDetailsTrainer(null); }}
+                  className="w-full py-4 rounded-2xl bg-brand-blue text-white font-black text-sm uppercase tracking-widest shadow-lg shadow-brand-blue/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                >
+                  Select Trainer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ABORT BOOKING MODAL */}
       {showAbortModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -2158,7 +2647,7 @@ export default function WalkingBooking() {
                 <h3 className="font-display text-2xl font-black text-ink">Abort Booking</h3>
                 <button onClick={() => setShowAbortModal(false)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-ink hover:bg-slate-200 transition-colors">✕</button>
               </div>
-              
+
               <p className="text-sm font-bold text-ink/60 mb-6">
                 You are about to cancel this walking booking attempt. Please select a classification and provide a reason.
               </p>
@@ -2178,13 +2667,15 @@ export default function WalkingBooking() {
                   <div className={`font-black text-sm ${abortType === 'Cancel' ? 'text-rose-600' : 'text-ink/70'}`}>Cancel</div>
                   <div className="text-xs font-medium text-ink/50 mt-1">Customer backed out or couldn't pay halfway through.</div>
                 </button>
-                <button
-                  onClick={() => setAbortType('Void')}
-                  className={`p-4 rounded-xl text-left border-2 transition-all ${abortType === 'Void' ? 'border-rose-500 bg-rose-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
-                >
-                  <div className={`font-black text-sm ${abortType === 'Void' ? 'text-rose-600' : 'text-ink/70'}`}>Void</div>
-                  <div className="text-xs font-medium text-ink/50 mt-1">Staff made a mistake, selected wrong items, or system issue.</div>
-                </button>
+                {(selectedClass || selectedPlan) && (
+                  <button
+                    onClick={() => setAbortType('Void')}
+                    className={`p-4 rounded-xl text-left border-2 transition-all ${abortType === 'Void' ? 'border-rose-500 bg-rose-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                  >
+                    <div className={`font-black text-sm ${abortType === 'Void' ? 'text-rose-600' : 'text-ink/70'}`}>Void</div>
+                    <div className="text-xs font-medium text-ink/50 mt-1">Staff made a mistake, selected wrong items, or system issue.</div>
+                  </button>
+                )}
               </div>
 
               <div className="mb-6">
@@ -2197,7 +2688,7 @@ export default function WalkingBooking() {
                 ></textarea>
               </div>
             </div>
-            
+
             <div className="p-8 pt-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100 shrink-0">
               <button onClick={() => setShowAbortModal(false)} className="px-6 py-3 rounded-xl text-sm font-bold text-ink/60 hover:text-ink hover:bg-slate-200 transition-colors">Go Back</button>
               <button onClick={handleAbortBooking} disabled={aborting} className="px-8 py-3 rounded-xl text-sm font-black text-white bg-rose-500 hover:bg-rose-600 active:scale-95 transition-all shadow-lg shadow-rose-500/20 disabled:opacity-50">

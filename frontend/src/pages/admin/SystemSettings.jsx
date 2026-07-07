@@ -485,6 +485,28 @@ export default function SystemSettings() {
                   </span>
                 </div>
               </div>
+
+              <div className="p-6 rounded-3xl bg-slate-50/50 border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <h4 className="font-bold text-ink mb-1">Allow Blind Closing</h4>
+                  <p className="text-xs text-ink/50 leading-relaxed max-w-sm">
+                    When enabled, cashiers will not see the expected totals when closing a shift.
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleToggleGlobal('blind_closing_allow', globalSettings.blind_closing_allow)}
+                    disabled={isSaving}
+                    className={`w-14 h-8 rounded-full transition-all relative ${globalSettings.blind_closing_allow ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-1 w-6 h-6 rounded-full bg-white transition-all ${globalSettings.blind_closing_allow ? 'left-7' : 'left-1'}`} />
+                  </button>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-ink/40">
+                    {globalSettings.blind_closing_allow ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+              </div>
             </div>
           </section>
         </div>

@@ -814,7 +814,18 @@ export default function BookingManagement() {
                     <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
                       <div>
                         <p className="text-[9px] font-black text-ink/20 uppercase tracking-widest">Method</p>
-                        <p className="text-[11px] font-bold text-ink">{viewingBookingDetails.paymentMethod?.toUpperCase()}</p>
+                        {viewingBookingDetails.paymentMethod === 'split' && viewingBookingDetails.splitDetails?.length > 0 ? (
+                          <div className="space-y-1 mt-1">
+                            {viewingBookingDetails.splitDetails.map((sd, i) => (
+                              <div key={i} className="flex justify-between items-center text-[10px] bg-slate-50 px-2 py-1 rounded-md">
+                                <span className="font-bold text-ink uppercase">{sd.method.replace('center_', '')}</span>
+                                <span className="font-black text-brand-blue">AED {sd.amount?.toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] font-bold text-ink">{viewingBookingDetails.paymentMethod?.toUpperCase()}</p>
+                        )}
                       </div>
                       <div>
                         <p className="text-[9px] font-black text-ink/20 uppercase tracking-widest">Reference</p>

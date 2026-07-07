@@ -71,6 +71,9 @@ export const updateBrand = asyncHandler(async (req, res) => {
     brand.status = req.body.status || brand.status;
     brand.contactEmail = req.body.contactEmail || brand.contactEmail;
     brand.contactPhone = req.body.contactPhone || brand.contactPhone;
+    if (req.body.paymentSettings !== undefined) {
+      brand.paymentSettings = req.body.paymentSettings;
+    }
 
     const updatedBrand = await brand.save();
     res.json(updatedBrand);

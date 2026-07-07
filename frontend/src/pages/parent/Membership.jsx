@@ -167,6 +167,7 @@ export default function Membership() {
   const [loading, setLoading] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [couponAmount, setCouponAmount] = useState(0);
+  const [appliedCoupons, setAppliedCoupons] = useState([]);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const [globalSettings, setGlobalSettings] = useState({});
 
@@ -285,6 +286,7 @@ export default function Membership() {
         paymentMethod: 'card',
         reference: `mock_dash_${Date.now()}`,
         last4: cardForm.number.slice(-4),
+        appliedCoupons,
         couponCode,
         couponAmount
       });
@@ -299,6 +301,7 @@ export default function Membership() {
         sessionsPerWeek,
         claimBogo,
         bogoChildId: bogoChildId || selectedChildId || null,
+        appliedCoupons,
         couponCode,
         couponAmount
       });
@@ -862,6 +865,29 @@ export default function Membership() {
                 {/* 4. Voucher Redemption */}
                 <div className="space-y-6">
                   <label className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/30 ml-2">4. Redeem Voucher</label>
+                  {appliedCoupons.length > 0 && (
+                    <div className="mb-4 space-y-2">
+                      {appliedCoupons.map((c, i) => (
+                        <div key={i} className="flex items-center justify-between bg-white px-3 py-3 rounded-2xl border border-slate-100">
+                          <div>
+                            <span className="text-sm font-black uppercase text-ink">{c.code}</span>
+                            <span className="text-xs text-brand-blue font-bold ml-3">-{currency}{c.amount}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newCoupons = [...appliedCoupons];
+                              newCoupons.splice(i, 1);
+                              setAppliedCoupons(newCoupons);
+                              setCouponAmount(newCoupons.reduce((sum, cp) => sum + cp.amount, 0));
+                            }}
+                            className="text-red-500 text-[10px] font-black uppercase hover:text-red-600"
+                          >Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -869,37 +895,38 @@ export default function Membership() {
                       placeholder="Voucher Code (CPN-XXXX)"
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      disabled={couponAmount > 0 || isValidatingCoupon}
+                      disabled={isValidatingCoupon}
                     />
-                    {couponAmount > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => { setCouponAmount(0); setCouponCode(''); }}
-                        className="bg-rose-50 text-rose-500 px-6 py-4 rounded-2xl text-[10px] font-black uppercase"
-                      >Remove</button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setIsValidatingCoupon(true);
-                          try {
-                            const res = await api.post('/coupons/validate', { code: couponCode });
-                            setCouponAmount(res.data.data.amount);
-                          } catch (err) {
-                            setError(err.response?.data?.message || 'Invalid coupon');
-                          } finally {
-                            setIsValidatingCoupon(false);
-                          }
-                        }}
-                        disabled={!couponCode || isValidatingCoupon}
-                        className="bg-brand-blue text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase disabled:opacity-50 shadow-lg"
-                      >Validate</button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (appliedCoupons.find(c => c.code === couponCode)) {
+                          toast.error('Coupon already applied');
+                          return;
+                        }
+                        setIsValidatingCoupon(true);
+                        try {
+                          const res = await api.post('/coupons/validate', { code: couponCode });
+                          const amount = res.data.data ? res.data.data.amount : res.data.amount;
+                          const newCoupon = { code: couponCode, amount: amount };
+                          const newCoupons = [...appliedCoupons, newCoupon];
+                          setAppliedCoupons(newCoupons);
+                          setCouponAmount(newCoupons.reduce((sum, cp) => sum + cp.amount, 0));
+                          setCouponCode('');
+                        } catch (err) {
+                          setError(err.response?.data?.message || 'Invalid coupon');
+                        } finally {
+                          setIsValidatingCoupon(false);
+                        }
+                      }}
+                      disabled={!couponCode || isValidatingCoupon}
+                      className="bg-brand-blue text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase disabled:opacity-50 shadow-lg"
+                    >Validate</button>
                   </div>
                   {couponAmount > 0 && (
-                    <p className="mt-1 text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                    <p className="mt-2 text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      {currency} {couponAmount} applied to this transaction!
+                      {currency} {couponAmount} total voucher amount applied!
                     </p>
                   )}
                 </div>

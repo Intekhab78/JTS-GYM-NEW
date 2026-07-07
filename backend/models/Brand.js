@@ -13,7 +13,7 @@ const brandSchema = new mongoose.Schema(
     },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
     contactEmail: { type: String },
-    contactPhone: { type: String }
+    contactPhone: { type: String }, paymentSettings: { type: Object, default: { cash: true, coupon: true, voucher: true, card: { visa: true, mastercard: true, amex: true, discover: false, unionpay: false, jcb: false, rupay: false, classic: false, gold: false, platinum: false, titanium: false, signature_visa: false, infinite_visa: false, world_mastercard: false, world_elite_mastercard: false, standard: false, business: false, corporate: false, student: false, secured: false, rewards: false, cashback: false, travel: false, premium: false, other: false } } }
   },
   { timestamps: true }
 );

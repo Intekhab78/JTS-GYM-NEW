@@ -179,9 +179,8 @@ export default function InvoiceView() {
               display: block !important;
             }
             .invoice-content {
-                padding: 15mm !important;
+                padding: 0mm !important;
                 box-sizing: border-box;
-                min-height: 297mm;
             }
           }
         `}
@@ -195,7 +194,7 @@ export default function InvoiceView() {
                   <div className="absolute top-0 right-0 w-96 h-96 bg-brand-blue/5 rounded-full -mr-48 -mt-48 blur-3xl print:hidden" />
                   <div className="absolute bottom-0 left-0 w-64 h-64 bg-coral/5 rounded-full -ml-32 -mb-32 blur-3xl print:hidden" />
 
-                  <div className="relative p-6 md:p-12 print:p-10">
+                  <div className="relative p-6 md:p-12 print:p-2">
                      <div className="flex flex-col md:flex-row justify-end items-end md:items-center gap-4 mb-8 print:hidden">
                         <button 
                            onClick={() => window.print()} 
@@ -213,7 +212,7 @@ export default function InvoiceView() {
                         </div>
                      </div>
 
-                     <div className="grid md:grid-cols-2 gap-12 items-start print:grid-cols-2 print:gap-4 mb-12 print:mb-8">
+                     <div className="grid md:grid-cols-2 gap-12 items-start print:grid-cols-2 print:gap-2 mb-12 print:mb-2">
                         <div className="space-y-4">
                            <div className="flex items-center gap-4">
                               {logoSrc ? (
@@ -245,7 +244,7 @@ export default function InvoiceView() {
                         </div>
                      </div>
 
-                     <div className="grid grid-cols-2 gap-12 mb-12 print:mb-8 print:gap-8">
+                     <div className="grid grid-cols-2 gap-12 mb-12 print:mb-2 print:gap-2">
                         <div className="space-y-4">
                            <p className="inline-block px-3 py-1 bg-brand-blue/5 rounded-lg text-[9px] font-black text-brand-blue uppercase tracking-[0.3em]">Bill From</p>
                            <div className="space-y-2">
@@ -276,51 +275,53 @@ export default function InvoiceView() {
                         </div>
                      </div>
 
-                     <div className="mb-12 print:mb-8">
+                     <div className="mb-12 print:mb-2">
                         <table className="w-full border-collapse">
                            <thead>
                               <tr className="border-b-2 border-slate-100">
-                                 <th className="py-4 text-[9px] font-black text-ink/20 uppercase tracking-[0.3em] text-left">Description</th>
-                                 <th className="py-4 px-4 text-[9px] font-black text-ink/20 uppercase tracking-[0.3em] text-center">Qty</th>
-                                 <th className="py-4 px-4 text-[9px] font-black text-ink/20 uppercase tracking-[0.3em] text-right">Rate</th>
-                                 <th className="py-4 text-[9px] font-black text-ink/20 uppercase tracking-[0.3em] text-right">Amount</th>
+                                 <th className="py-4 print:py-2 text-[9px] font-black text-ink/20 uppercase tracking-[0.3em] text-left">Description</th>
+                                 <th className="py-4 print:py-2 px-4 text-[9px] font-black text-ink/20 uppercase tracking-[0.3em] text-center">Qty</th>
+                                 <th className="py-4 print:py-2 px-4 text-[9px] font-black text-ink/20 uppercase tracking-[0.3em] text-right">Rate</th>
+                                 <th className="py-4 print:py-2 px-4 text-[9px] font-black text-ink/20 uppercase tracking-[0.3em] text-right">Tax</th>
+                                 <th className="py-4 print:py-2 text-[9px] font-black text-ink/20 uppercase tracking-[0.3em] text-right">Net Amount</th>
                               </tr>
                            </thead>
                            <tbody className="divide-y divide-slate-50">
                                {invoice.items.filter(item => item.quantity > 0 || item.unitPrice !== 0).map((item, idx) => (
                                   <tr key={idx}>
-                                     <td className="py-6">
+                                     <td className="py-6 print:py-2">
                                         <p className="font-black text-ink text-lg tracking-tighter uppercase">{item.description}</p>
                                      </td>
-                                     <td className="py-6 px-4 text-center font-black text-ink/40 leading-none">{item.quantity}</td>
-                                     <td className="py-6 px-4 text-right font-black text-ink/40 text-xs">{displayCurrency} {item.unitPrice.toFixed(2)}</td>
-                                     <td className="py-6 text-right font-black text-ink text-xl tracking-tighter">{displayCurrency} {(item.unitPrice * item.quantity).toFixed(2)}</td>
+                                     <td className="py-6 print:py-2 px-4 text-center font-black text-ink/40 leading-none">{item.quantity}</td>
+                                     <td className="py-6 print:py-2 px-4 text-right font-black text-ink/40 text-xs">{displayCurrency} {item.unitPrice.toFixed(2)}</td>
+                                     <td className="py-6 print:py-2 px-4 text-right font-black text-ink/40 text-xs">{displayCurrency} {(item.taxAmount || 0).toFixed(2)}</td>
+                                     <td className="py-6 print:py-2 text-right font-black text-ink text-xl tracking-tighter">{displayCurrency} {((item.unitPrice * item.quantity) - (isInclusive ? (item.taxAmount || 0) : 0)).toFixed(2)}</td>
                                   </tr>
                                ))}
                            </tbody>
                         </table>
                      </div>
 
-                     <div className="rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm">
-                        <div className="flex items-center justify-between px-8 py-4 bg-slate-50/80 border-b border-slate-100">
+                     <div className="rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm print:break-inside-avoid print:border-none print:shadow-none">
+                        <div className="flex items-center justify-between px-8 py-4 print:px-2 print:py-1 bg-slate-50/80 border-b border-slate-100 print:bg-transparent">
                            <span className="text-[10px] font-black text-ink/40 uppercase tracking-[0.3em]">Gross Subtotal</span>
                            <span className="text-sm font-black text-ink tracking-tight">{displayCurrency} {itemAmount.toFixed(2)}</span>
                         </div>
                         {discountAmount > 0 && (
-                           <div className="flex items-center justify-between px-8 py-4 bg-emerald-50/60 border-b border-emerald-100">
+                           <div className="flex items-center justify-between px-8 py-4 print:px-4 print:py-2 bg-emerald-50/60 border-b border-emerald-100">
                               <span className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.3em]">Discount ({discountLabel})</span>
                               <span className="text-sm font-black text-emerald-600 tracking-tight">- {displayCurrency} {discountAmount.toFixed(2)}</span>
                            </div>
                         )}
-                        <div className="flex items-center justify-between px-8 py-4 bg-slate-50/80 border-b border-slate-100">
+                        <div className="flex items-center justify-between px-8 py-4 print:px-4 print:py-2 bg-slate-50/80 border-b border-slate-100">
                            <span className="text-[10px] font-black text-ink/40 uppercase tracking-[0.3em]">Net Amount (Excl. VAT)</span>
                            <span className="text-sm font-black text-ink tracking-tight">{displayCurrency} {Math.max(0, amountAfterDiscount - (isInclusive ? taxAmount : 0)).toFixed(2)}</span>
                         </div>
-                        <div className="flex items-center justify-between px-8 py-4 bg-slate-50/80 border-b border-slate-100">
+                        <div className="flex items-center justify-between px-8 py-4 print:px-4 print:py-2 bg-slate-50/80 border-b border-slate-100">
                            <span className="text-[10px] font-black text-ink/40 uppercase tracking-[0.3em]">{isInclusive ? 'VAT (Included in Total)' : 'VAT (Additional)'}</span>
                            <span className="text-sm font-black text-ink/60 tracking-tight">{isInclusive ? '' : '+ '}{displayCurrency} {taxAmount.toFixed(2)}</span>
                         </div>
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-8 py-6 bg-brand-blue">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-8 py-6 print:px-2 print:py-1.5 bg-brand-blue print:bg-brand-blue/90">
                            <div className="space-y-1">
                               <h4 className="text-[10px] font-black text-white/60 uppercase tracking-[0.4em]">Total Amount</h4>
                               <p className="text-[8px] font-black text-white/30 uppercase tracking-widest">{totalInWords}</p>
@@ -329,7 +330,43 @@ export default function InvoiceView() {
                         </div>
                      </div>
 
-                     <div className="mt-8 pt-8 border-t border-slate-50">
+                     {/* Payment Details block */}
+                     <div className="mt-8 print:mt-2 border border-slate-100 rounded-[2rem] overflow-hidden shadow-sm print:break-inside-avoid print:border-none print:shadow-none">
+                        <div className="px-8 py-4 print:px-2 print:py-1 bg-slate-50 border-b border-slate-100 print:bg-transparent">
+                           <h5 className="text-[10px] font-black text-ink/40 uppercase tracking-[0.3em]">Payment Breakdown</h5>
+                        </div>
+                        <div className="divide-y divide-slate-50">
+                           {invoice.splitDetails && invoice.splitDetails.length > 0 ? (
+                              invoice.splitDetails.map((split, i) => (
+                                 <div key={i} className="flex items-center justify-between px-8 py-4 print:px-4 print:py-2 bg-white">
+                                    <span className="text-xs font-black text-ink/60 uppercase">{split.method.replace('_', ' ')}</span>
+                                    <span className="text-sm font-black text-ink">{displayCurrency} {split.amount.toFixed(2)}</span>
+                                 </div>
+                              ))
+                           ) : (
+                              <div className="flex items-center justify-between px-8 py-4 print:px-4 print:py-2 bg-white">
+                                 <span className="text-xs font-black text-ink/60 uppercase">Paid via</span>
+                                 <span className="text-sm font-black text-ink uppercase">{invoice.paymentMethod || 'Primary Method'}</span>
+                              </div>
+                           )}
+                           
+                           {(invoice.tenderedAmount > 0) && (
+                              <div className="flex items-center justify-between px-8 py-4 print:px-4 print:py-2 bg-slate-50 border-t border-slate-100">
+                                 <span className="text-[10px] font-black text-ink/40 uppercase tracking-[0.3em]">Cash Tendered</span>
+                                 <span className="text-sm font-black text-ink tracking-tight">{displayCurrency} {invoice.tenderedAmount.toFixed(2)}</span>
+                              </div>
+                           )}
+                           
+                           {(invoice.changeAmount > 0) && (
+                              <div className="flex items-center justify-between px-8 py-4 print:px-4 print:py-2 bg-emerald-50 text-emerald-700 border-t border-emerald-100">
+                                 <span className="text-[10px] font-black uppercase tracking-[0.3em]">Change Returned (Exchange)</span>
+                                 <span className="text-sm font-black tracking-tight">{displayCurrency} {invoice.changeAmount.toFixed(2)}</span>
+                              </div>
+                           )}
+                        </div>
+                     </div>
+
+                     <div className="mt-8 pt-8 print:mt-2 print:pt-2 border-t border-slate-50 print:break-inside-avoid">
                         <h5 className="text-[10px] font-black text-ink/30 uppercase tracking-[0.3em] mb-3">Terms & Conditions</h5>
                         <p className="text-[11px] font-bold text-ink/40 leading-relaxed uppercase tracking-wider whitespace-pre-line">
                            {displayCompany.invoiceTerms}

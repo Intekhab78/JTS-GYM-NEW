@@ -682,12 +682,20 @@ export const createMembership = asyncHandler(async (req, res) => {
     let resolvedPaymentMethod = payRec ? payRec.paymentMethod : 'center';
     let promotionId = payRec ? payRec.promotionId : null;
     const discountAmount = Number(payRec?.discountAmount ?? reqDiscountAmount ?? 0) || 0;
-    const resolvedCouponAmount = Number(couponAmount ?? payRec?.couponAmount ?? 0) || 0;
-    const resolvedCouponCodeRaw = (couponCode ?? payRec?.couponCode ?? '').toString().trim();
+    let resolvedCouponAmount = Number(couponAmount ?? payRec?.couponAmount ?? 0) || 0;
+    let resolvedCouponCodeRaw = (couponCode ?? payRec?.couponCode ?? '').toString().trim();
+
+    if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+      resolvedCouponCodeRaw = req.body.appliedCoupons.map(c => c.code).join(', ');
+      resolvedCouponAmount = req.body.appliedCoupons.reduce((sum, c) => sum + (c.amount || 0), 0);
+    }
+
     const resolvedCouponCode = resolvedCouponCodeRaw ? resolvedCouponCodeRaw.toUpperCase() : undefined;
 
     const primaryChild = await Child.findById(childId).session(session);
     const participants = [];
+
+    const targetUserObj = await mongoose.model('User').findById(targetUserId).session(session);
 
     if (primaryChild) {
       participants.push({
@@ -699,7 +707,7 @@ export const createMembership = asyncHandler(async (req, res) => {
       });
     } else {
       participants.push({
-        name: req.user.name || 'Account Holder',
+        name: targetUserObj?.name || targetUserObj?.firstName || 'Account Holder',
         age: 18,
         gender: 'other',
         relation: 'Self'
@@ -750,7 +758,7 @@ export const createMembership = asyncHandler(async (req, res) => {
     const bookingNumber = await getNextBookingNumber();
     
     const { currency, companySnapshot, customerSnapshot } = await getTransactionSnapshots(
-      await mongoose.model('User').findById(targetUserId)
+      targetUserObj
     );
 
     // TAX & PRICE CALCULATION
@@ -810,6 +818,8 @@ export const createMembership = asyncHandler(async (req, res) => {
       couponCode: resolvedCouponCode,
       couponAmount: resolvedCouponAmount,
       participants,
+      processedBy: isStaff ? req.user._id : undefined,
+      processedByRole: isStaff ? req.user.role : undefined,
       isUAT: req.isUAT || false
     }], { session });
 
@@ -866,12 +876,25 @@ export const createMembership = asyncHandler(async (req, res) => {
     }
 
     if (resolvedCouponAmount > 0) {
-      invoiceItems.push({
-        description: resolvedCouponCode ? `Cash Voucher Applied (${resolvedCouponCode})` : 'Cash Voucher Applied',
-        quantity: 1,
-        unitPrice: -resolvedCouponAmount,
-        total: -resolvedCouponAmount
-      });
+      if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+        req.body.appliedCoupons.forEach(c => {
+          if (c.amount > 0) {
+            invoiceItems.push({
+              description: `Cash Voucher Applied (${c.code})`,
+              quantity: 1,
+              unitPrice: -c.amount,
+              total: -c.amount
+            });
+          }
+        });
+      } else {
+        invoiceItems.push({
+          description: resolvedCouponCode ? `Cash Voucher Applied (${resolvedCouponCode})` : 'Cash Voucher Applied',
+          quantity: 1,
+          unitPrice: -resolvedCouponAmount,
+          total: -resolvedCouponAmount
+        });
+      }
     }
 
     await Invoice.create([{
@@ -890,6 +913,9 @@ export const createMembership = asyncHandler(async (req, res) => {
       currency,
       companySnapshot,
       customerSnapshot,
+      splitDetails: payRec ? payRec.splitDetails : [],
+      tenderedAmount: payRec ? payRec.tenderedAmount : 0,
+      changeAmount: payRec ? payRec.changeAmount : 0,
       isUAT: req.isUAT || false
     }], { session });
 
@@ -919,7 +945,18 @@ export const createMembership = asyncHandler(async (req, res) => {
     }
 
     // COUPON REDEMPTION LOGIC
-    if (resolvedCouponCode) {
+    if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+      for (const c of req.body.appliedCoupons) {
+        const redeemedCoupon = await Coupon.findOne({ code: c.code.toUpperCase(), status: 'active' }).session(session);
+        if (redeemedCoupon) {
+          redeemedCoupon.status = 'redeemed';
+          redeemedCoupon.redeemBookingId = bookingRec._id;
+          redeemedCoupon.redeemedAt = new Date();
+          if (!redeemedCoupon.userId) redeemedCoupon.userId = targetUserId;
+          await redeemedCoupon.save({ session });
+        }
+      }
+    } else if (resolvedCouponCode) {
       const redeemedCoupon = await Coupon.findOne({ code: resolvedCouponCode, status: 'active' }).session(session);
       if (redeemedCoupon) {
         redeemedCoupon.status = 'redeemed';
@@ -981,7 +1018,7 @@ export const updateMembershipTrainer = asyncHandler(async (req, res) => {
 
     for (const session of upcomingSessions) {
       session.trainerId = trainerId || null;
-      if (trainerId) session.trainerStatus = 'accepted';
+      if (trainerId) session.trainerStatus = 'pending';
       await session.save();
     }
   }

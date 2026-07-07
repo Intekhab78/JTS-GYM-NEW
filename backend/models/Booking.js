@@ -28,6 +28,12 @@ const bookingSchema = new mongoose.Schema(
     locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Location' },
     brandId: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand' },
     paymentMethod: { type: String, default: 'center' },
+    splitDetails: [
+      {
+        method: { type: String },
+        amount: { type: Number }
+      }
+    ],
     paymentStatus: { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
     paymentReference: { type: String },
     cancellationReason: { type: String },

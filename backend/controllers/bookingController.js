@@ -359,6 +359,13 @@ export const createBooking = asyncHandler(async (req, res) => {
 
   const bookingNumber = `BK-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 12).toUpperCase()}`;
 
+  let finalCouponCode = req.body.couponCode;
+  let finalCouponAmount = req.body.couponAmount || 0;
+  if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+    finalCouponCode = req.body.appliedCoupons.map(c => c.code).join(', ');
+    finalCouponAmount = req.body.appliedCoupons.reduce((sum, c) => sum + (c.amount || 0), 0);
+  }
+
   const bookingData = {
     bookingNumber,
     participants,
@@ -375,8 +382,8 @@ export const createBooking = asyncHandler(async (req, res) => {
     status: paymentStatus === 'completed' ? 'confirmed' : 'pending',
     promotionId,
     discountAmount: discountAmount || 0,
-    couponCode: req.body.couponCode,
-    couponAmount: req.body.couponAmount || 0,
+    couponCode: finalCouponCode,
+    couponAmount: finalCouponAmount,
     isUAT: req.isUAT || false
   };
 
@@ -401,16 +408,24 @@ export const createBooking = asyncHandler(async (req, res) => {
   notifyAdmins(req, 'new_booking', { bookingId: created._id });
 
   // COUPON REDEMPTION LOGIC
-  if (req.body.couponCode) {
-    const coupon = await Coupon.findOne({ code: req.body.couponCode.toUpperCase(), status: 'active' });
+  if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+    for (const c of req.body.appliedCoupons) {
+      const coupon = await Coupon.findOne({ code: c.code.toUpperCase(), status: 'active' });
+      if (coupon) {
+        coupon.status = 'redeemed';
+        coupon.redeemBookingId = created._id;
+        coupon.redeemedAt = new Date();
+        if (!coupon.userId && created.userId) coupon.userId = created.userId;
+        await coupon.save();
+      }
+    }
+  } else if (finalCouponCode) {
+    const coupon = await Coupon.findOne({ code: finalCouponCode.toUpperCase(), status: 'active' });
     if (coupon) {
       coupon.status = 'redeemed';
       coupon.redeemBookingId = created._id;
       coupon.redeemedAt = new Date();
-      // Link user if not already set
-      if (!coupon.userId && created.userId) {
-        coupon.userId = created.userId;
-      }
+      if (!coupon.userId && created.userId) coupon.userId = created.userId;
       await coupon.save();
     }
   }
@@ -424,7 +439,15 @@ export const createBooking = asyncHandler(async (req, res) => {
   const invoiceItems = [{ description: `${classItem.title} - Session Booking`, quantity: participants.length, unitPrice: classItem.price || 0, total: (classItem.price || 0) * participants.length }];
   if (req.body.claimBogo) invoiceItems.push({ description: `BOGO Free Item - ${classItem.title}`, quantity: participants.length, unitPrice: 0, total: 0 });
   if (discountAmount > 0) invoiceItems.push({ description: 'Promotion Discount', quantity: 1, unitPrice: -discountAmount, total: -discountAmount });
-  if (req.body.couponAmount > 0) invoiceItems.push({ description: `Cash Voucher Applied (${req.body.couponCode})`, quantity: 1, unitPrice: -req.body.couponAmount, total: -req.body.couponAmount });
+  if (finalCouponAmount > 0) {
+    if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+      req.body.appliedCoupons.forEach(c => {
+        if (c.amount > 0) invoiceItems.push({ description: `Cash Voucher Applied (${c.code})`, quantity: 1, unitPrice: -c.amount, total: -c.amount });
+      });
+    } else {
+      invoiceItems.push({ description: `Cash Voucher Applied (${finalCouponCode})`, quantity: 1, unitPrice: -finalCouponAmount, total: -finalCouponAmount });
+    }
+  }
 
   await Invoice.create({
     invoiceNumber,
@@ -439,8 +462,8 @@ export const createBooking = asyncHandler(async (req, res) => {
     items: invoiceItems,
     taxAmount,
     discountAmount: discountAmount || 0,
-    couponAmount: req.body.couponAmount || 0,
-    couponCode: req.body.couponCode,
+    couponAmount: finalCouponAmount,
+    couponCode: finalCouponCode,
     currency,
     companySnapshot,
     customerSnapshot
@@ -477,8 +500,16 @@ export const createBooking = asyncHandler(async (req, res) => {
     await session.save();
   }
 
-  const userForEmail = req.user || { name: guestDetails.name, email: guestDetails.email };
-  sendBookingConfirmationEmail(created, classItem, userForEmail).catch(err => console.error('Booking confirmation email failed:', err.message));
+  let userForEmail = null;
+  if (created.userId) {
+    userForEmail = await User.findById(created.userId);
+  } else if (guestDetails && guestDetails.email) {
+    userForEmail = { name: guestDetails.name, email: guestDetails.email };
+  }
+
+  if (userForEmail) {
+    sendBookingConfirmationEmail(created, classItem, userForEmail).catch(err => console.error('Booking confirmation email failed:', err.message));
+  }
 
   // EMIT: Notify admin room about new booking
   const io = req.app.get('socketio');
@@ -487,7 +518,7 @@ export const createBooking = asyncHandler(async (req, res) => {
     const loc = await LocationModel.findById(resolvedLocationId);
     io.to('admin_room').emit('new_booking', {
       bookingNumber: created.bookingNumber,
-      customerName: guestDetails?.name || req.user?.name || 'Customer',
+      customerName: guestDetails?.name || userForEmail?.name || 'Customer',
       locationName: loc?.name || 'Main Center',
       totalAmount: created.totalAmount
     });
@@ -822,7 +853,15 @@ export const linkUserBookings = async (user) => {
 };
 
 export const createGroupBooking = asyncHandler(async (req, res) => {
-  const { participants, sessionIds, sessions, classId: providedClassId, locationId: providedLocationId, corporateName, paymentMethod, promotionId, discountAmount, couponCode, couponAmount, guestDetails } = req.body;
+  const { participants, sessionIds, sessions, classId: providedClassId, locationId: providedLocationId, corporateName, paymentMethod, promotionId, discountAmount, guestDetails } = req.body;
+  let couponCode = req.body.couponCode;
+  let couponAmount = req.body.couponAmount || 0;
+  
+  if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+    couponCode = req.body.appliedCoupons.map(c => c.code).join(', ');
+    couponAmount = req.body.appliedCoupons.reduce((sum, c) => sum + (c.amount || 0), 0);
+  }
+
   const resolvedSessionIds = sessionIds || sessions;
   if (!participants?.length || !resolvedSessionIds?.length) throw new Error('Missing details');
 
@@ -859,9 +898,11 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     const sess = await Session.findById(sessionId);
     for (const p of participants) {
       const bookingNumber = `BK-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 12).toUpperCase()}`;
+      const targetUserId = req.user && req.body.userId ? req.body.userId : (req.user ? req.user._id : undefined);
+      const isStaff = req.user && !['parent', 'customer'].includes((req.user.role || '').toLowerCase());
       const b = await Booking.create({
         bookingNumber,
-        userId: req.user ? (req.body.userId || req.user._id) : undefined,
+        userId: targetUserId,
         guestDetails: !req.user ? guestDetails : undefined,
         classId,
         sessionId,
@@ -873,13 +914,16 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
         groupId: groupBookingId,
         corporateName,
         bookingType: 'session',
-        status: paymentMethod === 'online' ? 'confirmed' : 'pending',
-        paymentStatus: paymentMethod === 'online' ? 'completed' : 'pending',
+        status: (paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'confirmed' : 'pending',
+        paymentStatus: (paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'completed' : 'pending',
         paymentMethod: paymentMethod || 'center',
+        splitDetails: req.body.splitDetails || [],
         promotionId,
         discountAmount: dDisc,
         couponCode,
-        couponAmount: dCoup
+        couponAmount: dCoup,
+        processedBy: isStaff ? req.user._id : undefined,
+        processedByRole: isStaff ? req.user.role : undefined
       });
       bookings.push(b);
       totalAmount += singleTotal;
@@ -891,17 +935,25 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
   }
 
   // COUPON REDEMPTION LOGIC
-  if (couponCode) {
+  const targetUserId = req.body.userId || req.user?._id;
+  if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+    for (const c of req.body.appliedCoupons) {
+      const coupon = await Coupon.findOne({ code: c.code.toUpperCase(), status: 'active' });
+      if (coupon) {
+        coupon.status = 'redeemed';
+        coupon.redeemBookingId = bookings[0]?._id;
+        coupon.redeemedAt = new Date();
+        if (!coupon.userId && targetUserId) coupon.userId = targetUserId;
+        await coupon.save();
+      }
+    }
+  } else if (couponCode) {
     const coupon = await Coupon.findOne({ code: couponCode.toUpperCase(), status: 'active' });
     if (coupon) {
       coupon.status = 'redeemed';
       coupon.redeemBookingId = bookings[0]?._id;
       coupon.redeemedAt = new Date();
-      // Link user if not already set
-      const targetUserId = req.body.userId || req.user?._id;
-      if (!coupon.userId && targetUserId) {
-        coupon.userId = targetUserId;
-      }
+      if (!coupon.userId && targetUserId) coupon.userId = targetUserId;
       await coupon.save();
     }
   }
@@ -920,35 +972,54 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     
     const invoiceItems = [{ description: `${classItem.title} - Group Booking`, quantity: count, unitPrice: classItem.price || 0, total: rawBaseAmount }];
     if (discountAmount > 0) invoiceItems.push({ description: 'Promotion Discount', quantity: 1, unitPrice: -discountAmount, total: -discountAmount });
-    if (couponAmount > 0) invoiceItems.push({ description: `Cash Voucher Applied (${couponCode})`, quantity: 1, unitPrice: -couponAmount, total: -couponAmount });
+    
+    if (couponAmount > 0) {
+      if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+        req.body.appliedCoupons.forEach(c => {
+          if (c.amount > 0) invoiceItems.push({ description: `Cash Voucher Applied (${c.code})`, quantity: 1, unitPrice: -c.amount, total: -c.amount });
+        });
+      } else {
+        invoiceItems.push({ description: `Cash Voucher Applied (${couponCode})`, quantity: 1, unitPrice: -couponAmount, total: -couponAmount });
+      }
+    }
 
     await mongoose.model('Invoice').create({
       invoiceNumber,
       bookingId: bookings[0]._id, // Link unified invoice to the FIRST booking in the group
-      userId: req.user ? (req.body.userId || req.user._id) : undefined,
+      userId: req.user && req.body.userId ? req.body.userId : (req.user ? req.user._id : undefined),
       guestDetails: !req.user ? guestDetails : undefined,
       amount: totalAmount,
       grossAmount: rawBaseAmount,
       totalAmount: totalAmount,
-      status: paymentMethod === 'online' ? 'paid' : 'unpaid',
+      status: (paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'paid' : 'unpaid',
       locationId,
       items: invoiceItems,
       taxAmount: singleTax * count,
       discountAmount: discountAmount || 0,
       couponAmount: couponAmount || 0,
-      couponCode: couponCode
+      couponCode: couponCode,
+      splitDetails: req.body.splitDetails || [],
+      tenderedAmount: req.body.tenderedAmount || 0,
+      changeAmount: req.body.changeAmount || 0
     });
   }
 
   const gymRevenue = req.body.isVendorSale ? (Number(req.body.vendorSalePrice) - Number(req.body.vendorMargin || 0)) : undefined;
 
   await Payment.create({ 
-    userId: req.user ? (req.body.userId || req.user._id) : undefined, 
+    userId: req.user && req.body.userId ? req.body.userId : (req.user ? req.user._id : undefined), 
     guestDetails: !req.user ? guestDetails : undefined, 
     amount: totalAmount, 
     groupId: groupBookingId, 
-    status: paymentMethod === 'online' ? 'paid' : 'pending', 
+    bookingId: bookings[0]._id,
+    status: (totalAmount === 0 || paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'paid' : 'pending', 
     locationId,
+    paymentMethod,
+    splitDetails: req.body.splitDetails || [],
+    discountAmount: discountAmount || 0,
+    couponCode,
+    couponAmount: couponAmount || 0,
+    processedBy: req.user?._id,
     isVendorSale: req.body.isVendorSale || false,
     vendorId: req.body.isVendorSale ? req.body.vendorId : undefined,
     vendorSalePrice: req.body.isVendorSale ? Number(req.body.vendorSalePrice) : undefined,
@@ -997,8 +1068,13 @@ export const sendReminder = asyncHandler(async (req, res) => {
   const classData = booking.classId || booking.sessionId?.classId;
   const sessionData = booking.sessionId;
   // If sessionData was already populated, we use it directly
-  const sent = await sendSessionReminderEmail(booking, classData, sessionData, booking.userId || booking.guestDetails);
-  res.json({ message: sent ? 'Reminder sent' : 'Failed to send' });
+  const targetUser = booking.userId || booking.guestDetails;
+  console.log('--- MANUAL REMINDER TRIGGERED ---');
+  console.log('Booking ID:', booking._id);
+  console.log('User Data:', targetUser);
+  const sent = await sendSessionReminderEmail(booking, classData, sessionData, targetUser);
+  console.log('Email Sent Result:', sent);
+  return res.json({ message: sent ? 'Reminder sent' : 'Failed to send' });
 });
 
 export const getBookingById = asyncHandler(async (req, res) => {

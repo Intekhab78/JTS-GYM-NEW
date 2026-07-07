@@ -14,6 +14,9 @@ export const getClasses = asyncHandler(async (req, res) => {
   if (all !== 'true') {
     filter.status = 'active';
   }
+  if (req.brandId) {
+    filter.brandId = req.brandId;
+  }
 
   // Fetch classes with environment isolation
   const classes = await ClassModel.find(withUAT(req, filter))
@@ -58,6 +61,9 @@ export const getClassById = asyncHandler(async (req, res) => {
   let filter = { _id: req.params.id };
   if (locationId && locationId !== 'all') {
     filter.locationId = locationId;
+  }
+  if (req.brandId) {
+    filter.brandId = req.brandId;
   }
   
   const classItem = await ClassModel.findOne(withUAT(req, filter))
@@ -104,6 +110,7 @@ export const createClass = asyncHandler(async (req, res) => {
     imageUrl,
     creditCost: creditCost || 1,
     locationId,
+    brandId: req.brandId,
     isUAT: req.isUAT || false,
     categoryId: req.body.categoryId,
     taxId: req.body.taxId,
@@ -139,6 +146,10 @@ export const updateClass = asyncHandler(async (req, res) => {
     res.status(403);
     throw new Error('Not allowed');
   }
+  if (req.brandId && classItem.brandId?.toString() !== req.brandId.toString() && req.user?.role !== 'superadmin') {
+    res.status(403);
+    throw new Error('Not allowed for this brand');
+  }
 
   if (req.body.availableTrainers !== undefined) {
     const validTrainers = Array.isArray(req.body.availableTrainers)
@@ -163,7 +174,7 @@ export const updateClass = asyncHandler(async (req, res) => {
     for (const locId of locationsToReplicate) {
       if (mongoose.Types.ObjectId.isValid(locId)) {
         // Check if a class with the same title already exists in that location to avoid duplicates
-        const existing = await ClassModel.findOne({ title: saved.title, locationId: locId, isUAT: req.isUAT || false });
+        const existing = await ClassModel.findOne({ title: saved.title, locationId: locId, brandId: saved.brandId, isUAT: req.isUAT || false });
         if (!existing) {
           const newClassObj = saved.toObject();
           delete newClassObj._id;
@@ -207,6 +218,10 @@ export const deleteClass = asyncHandler(async (req, res) => {
   if (req.user?.role === 'admin' && req.user.locationId && classItem.locationId?.toString() !== req.user.locationId.toString()) {
     res.status(403);
     throw new Error('Not allowed');
+  }
+  if (req.brandId && classItem.brandId?.toString() !== req.brandId.toString() && req.user?.role !== 'superadmin') {
+    res.status(403);
+    throw new Error('Not allowed for this brand');
   }
 
   // Toggle status instead of deleting

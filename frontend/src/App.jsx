@@ -78,6 +78,7 @@ import TrainerDashboard from './pages/trainer/TrainerDashboard.jsx';
 import ReviewsManagement from './pages/admin/ReviewsManagement.jsx';
 import ShiftManagement from './pages/admin/ShiftManagement.jsx';
 import CMSManagement from './pages/admin/CMSManagement.jsx';
+import PaymentSettings from './pages/admin/PaymentSettings.jsx';
 import { SettingsProvider } from './context/SettingsContext.jsx';
 
 export default function App() {
@@ -137,6 +138,7 @@ export default function App() {
                   
                   <Route element={<RequireShift />}>
                     <Route path="/:roleSlug/walking-booking" element={<WalkingBooking />} />
+                  </Route>
 
                   <Route element={<RequirePermission permission="reports:view" />}>
                     <Route path="/:roleSlug/aborted-bookings" element={<AbortedBookings />} />
@@ -222,6 +224,7 @@ export default function App() {
 
                   <Route element={<RequirePermission permission="settings:view" />}>
                     <Route path="/:roleSlug/settings" element={<SystemSettings />} />
+                    <Route path="/:roleSlug/payment-settings" element={<PaymentSettings />} />
                     <Route path="/:roleSlug/taxes" element={<TaxManagement />} />
                     <Route path="/:roleSlug/vouchers" element={<VoucherManagement />} />
                     <Route path="/:roleSlug/cms" element={<CMSManagement />} />
@@ -234,7 +237,6 @@ export default function App() {
                     </Route>
                     
                     <Route path="/:roleSlug/uat" element={<UATManagement />} />
-                  </Route>
                 </Route>
               </Routes>
               </ShiftProvider>

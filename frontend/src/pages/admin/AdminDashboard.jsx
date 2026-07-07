@@ -5,6 +5,7 @@ import Navbar from '../../components/Navbar.jsx';
 import AdminHeader from '../../components/AdminHeader.jsx';
 import Footer from '../../components/Footer.jsx';
 import api from '../../api/api.js';
+import toast from 'react-hot-toast';
 import { usePermissions } from '../../hooks/usePermissions.js';
 import { BASE_URL } from '../../api/api.js';
 import { useShift } from '../../context/ShiftContext.jsx';
@@ -39,6 +40,7 @@ export default function AdminDashboard() {
     { to: `${base}/profit-loss`, title: 'Profit & Loss', desc: 'Analyze sales, expenses and net profit.', perm: 'profit_loss:view' },
     { to: `${base}/sales-dashboard`, title: 'Sales Dashboard', desc: 'Real-time sales, revenue trends, and metrics.', perm: 'profit_loss:view' },
     { to: `${base}/settings`, title: 'Company Setup', desc: 'Manage company name, footer info, and invoice numbering.', perm: 'settings:edit' },
+    { to: `${base}/payment-settings`, title: 'Payment Settings', desc: 'Configure accepted payment methods and cards.', perm: 'settings:edit' },
     { to: `${base}/taxes`, title: 'Tax Master', desc: 'Manage VAT and local tax rules location-wise.', perm: 'settings:view' },
     { to: `${base}/vouchers`, title: 'Vouchers', desc: 'Generate and print gift or promo vouchers.', perm: 'promotions:view' },
     { to: `${base}/cms`, title: 'Page Builder (CMS)', desc: 'Design website sections visually.', perm: 'settings:view' },
@@ -169,9 +171,13 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        <section className={`mt-6 grid gap-4 md:grid-cols-3 ${shouldBlockActions ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+        <section className="mt-6 grid gap-4 md:grid-cols-3">
           {filteredStats.map((stat) => (
-            <Link key={stat.label} to={stat.to} className="soft-card block rounded-2xl p-6 transition-all hover:shadow-md hover:-translate-y-1">
+            <Link 
+              key={stat.label} 
+              to={stat.to} 
+              className="soft-card block rounded-2xl p-6 transition-all hover:shadow-md hover:-translate-y-1"
+            >
               <p className="text-xs font-bold text-ink/40 uppercase tracking-widest">{stat.label}</p>
               <p className={`mt-3 text-3xl font-black text-ink ${loading ? 'animate-pulse' : ''}`}>
                 {loading ? '—' : stat.value}
@@ -181,7 +187,7 @@ export default function AdminDashboard() {
           ))}
         </section>
 
-        <section className={`mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4 ${shouldBlockActions ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+        <section className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {filteredActions.map((action) => {
             const count = getNotificationCount(action.title);
             return (
@@ -189,7 +195,13 @@ export default function AdminDashboard() {
                 key={action.to} 
                 to={action.to} 
                 className="soft-card relative rounded-3xl p-6 transition hover:-translate-y-1"
-                onClick={() => {
+                onClick={(e) => {
+                  const requiresShift = ['Walking Booking']; 
+                  if (shouldBlockActions && requiresShift.includes(action.title)) {
+                    e.preventDefault();
+                    toast.error(isShiftExpired ? `Please close yesterday's shift first to access ${action.title}.` : `Please start the shift first to access ${action.title}.`);
+                    return;
+                  }
                   const categoryMap = {
                     'Bookings': 'bookings',
                     'Trial requests': 'trials',

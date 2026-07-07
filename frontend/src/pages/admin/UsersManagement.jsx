@@ -66,7 +66,8 @@ export default function UsersManagement() {
     phone: '',
     locationIds: [],
     allowUAT: false,
-    canManageShifts: false
+    canManageShifts: false,
+    managerId: ''
   });
 
   const { can, user } = usePermissions();
@@ -149,7 +150,8 @@ export default function UsersManagement() {
       phone: u.phone || '',
       locationIds: (u.locationIds || []).map(l => l._id || l),
       allowUAT: u.allowUAT || false,
-      canManageShifts: u.canManageShifts || false
+      canManageShifts: u.canManageShifts || false,
+      managerId: u.managerId?._id || ''
     });
     setShowAddStaff(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -171,7 +173,7 @@ export default function UsersManagement() {
       }
       setShowAddStaff(false);
       setEditingUserId(null);
-      setStaffForm({ name: '', email: '', password: '', role: 'admin', phone: '', locationIds: [], allowUAT: false, canManageShifts: false });
+      setStaffForm({ name: '', email: '', password: '', role: 'admin', phone: '', locationIds: [], allowUAT: false, canManageShifts: false, managerId: '' });
       load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to save user');
@@ -252,7 +254,7 @@ export default function UsersManagement() {
                 if (showAddStaff) {
                   setShowAddStaff(false);
                   setEditingUserId(null);
-                  setStaffForm({ name: '', email: '', password: '', role: 'admin', phone: '', locationIds: [], allowUAT: false, canManageShifts: false });
+                  setStaffForm({ name: '', email: '', password: '', role: 'admin', phone: '', locationIds: [], allowUAT: false, canManageShifts: false, managerId: '' });
                 } else {
                   setShowAddStaff(true);
                 }
@@ -300,11 +302,25 @@ export default function UsersManagement() {
                   <select value={staffForm.role} onChange={e => setStaffForm({...staffForm, role: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold">
                     <option value="customer">Customer</option>
                     <option value="trainer">Trainer</option>
+                    <option value="cashier">Cashier</option>
                     <option value="admin">Admin</option>
                     <option value="superadmin">Superadmin</option>
                     {customRoles.map(r => <option key={r._id} value={r.name}>{r.name}</option>)}
                   </select>
                 </div>
+                {staffForm.role !== 'superadmin' && staffForm.role !== 'customer' && (
+                  <div>
+                    <label className="text-[10px] font-black text-ink/30 uppercase tracking-widest block mb-2">Reports To (Manager)</label>
+                    <select value={staffForm.managerId} onChange={e => setStaffForm({...staffForm, managerId: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold">
+                      <option value="">No Manager (Top Level)</option>
+                      {users
+                        .filter(u => u.role !== 'customer' && u.role !== 'parent' && u.role !== 'trainer' && u._id !== editingUserId)
+                        .map(m => (
+                          <option key={m._id} value={m._id}>{m.name} ({m.role})</option>
+                        ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="text-[10px] font-black text-ink/30 uppercase tracking-widest block mb-2">UAT Environment Access</label>
                   <label className="flex items-center gap-3 bg-slate-50 rounded-2xl py-3 px-4 text-sm font-bold cursor-pointer hover:bg-slate-100/80 transition-all min-h-[44px]">
@@ -563,20 +579,35 @@ export default function UsersManagement() {
                         <h4 className="text-[10px] font-black text-ink/20 uppercase tracking-[0.2em]">Contact Details</h4>
                         <div className="space-y-4">
                            <div className="flex flex-col"><span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Address</span><span className="text-xs font-bold text-ink mt-1">{user.address || 'Not provided'}</span></div>
-                           <div className="flex flex-col"><span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Location</span><span className="text-xs font-bold text-ink mt-1">{user.city}, {user.country}</span></div>
+                           <div className="flex flex-col"><span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Alt Phone</span><span className="text-xs font-bold text-ink mt-1">{user.altPhone || 'Not provided'}</span></div>
+                           <div className="flex flex-col"><span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Gender</span><span className="text-xs font-bold text-ink mt-1 capitalize">{user.gender || 'Not provided'}</span></div>
+                           <div className="flex flex-col"><span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Date of Birth</span><span className="text-xs font-bold text-ink mt-1">{user.birthDate ? new Date(user.birthDate).toLocaleDateString() : 'Not provided'}</span></div>
+                           <div className="flex flex-col"><span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Location</span><span className="text-xs font-bold text-ink mt-1">{user.city || 'Not provided'}, {user.country || 'Not provided'}</span></div>
+                           {user.managerId && (
+                             <div className="flex flex-col">
+                               <span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Reports To</span>
+                               <span className="text-xs font-bold text-ink mt-1 flex items-center gap-2">
+                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-coral" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                 {user.managerId.name} ({user.managerId.role})
+                               </span>
+                             </div>
+                           )}
                            <div className="flex flex-col"><span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Joined On</span><span className="text-xs font-bold text-ink mt-1">{new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span></div>
                         </div>
                       </div>
 
                       <div className="space-y-6">
-                        <h4 className="text-[10px] font-black text-ink/20 uppercase tracking-[0.2em]">Children ({userChildren[user._id]?.length || 0})</h4>
+                        <h4 className="text-[10px] font-black text-ink/20 uppercase tracking-[0.2em]">Members ({userChildren[user._id]?.length || 0})</h4>
                         <div className="flex flex-wrap gap-2">
                           {userChildren[user._id]?.map(child => (
-                            <div key={child._id} className="bg-white px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-ink/70">
-                              {child.name} <span className="text-[10px] text-ink/20 ml-2">({child.age} yrs)</span>
+                            <div key={child._id} className="bg-white px-4 py-3 rounded-xl border border-slate-200 text-xs font-bold text-ink/70 flex flex-col gap-1">
+                              <div>{child.name} <span className="text-[10px] text-ink/20 ml-1">({child.age} yrs)</span></div>
+                              {child.relationship && <div className="text-[10px] text-brand-blue font-black uppercase tracking-widest">{child.relationship}</div>}
+                              {child.phone && <div className="text-[10px] text-ink/40 font-medium">📞 {child.phone}</div>}
+                              {child.email && <div className="text-[10px] text-ink/40 font-medium">✉️ {child.email}</div>}
                             </div>
                           ))}
-                          {(!userChildren[user._id] || userChildren[user._id].length === 0) && <p className="text-xs text-ink/20 italic">No children linked</p>}
+                          {(!userChildren[user._id] || userChildren[user._id].length === 0) && <p className="text-xs text-ink/20 italic">No members linked</p>}
                         </div>
                       </div>
 
