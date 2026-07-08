@@ -41,6 +41,14 @@ const invoiceSchema = new mongoose.Schema(
     taxAmount: { type: Number, default: 0 },
     grossAmount: { type: Number, default: 0 },
     totalAmount: { type: Number, default: 0 },
+    splitDetails: [
+      {
+        method: { type: String },
+        amount: { type: Number }
+      }
+    ],
+    tenderedAmount: { type: Number, default: 0 },
+    changeAmount: { type: Number, default: 0 },
     locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Location' },
     discountAmount: { type: Number, default: 0 },
     couponAmount: { type: Number, default: 0 },

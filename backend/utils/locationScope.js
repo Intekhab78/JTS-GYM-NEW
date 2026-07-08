@@ -1,4 +1,8 @@
 export const resolveReadLocationId = (req) => {
+  if (!req.user) {
+    return req.locationId ? req.locationId.toString() : null;
+  }
+
   const isSuperadmin = req.user?.role === 'superadmin';
 
   if (isSuperadmin) {
@@ -25,6 +29,10 @@ export const resolveReadLocationId = (req) => {
 };
 
 export const resolveReadLocationIds = (req) => {
+  if (!req.user) {
+    return req.locationId ? [req.locationId.toString()] : null;
+  }
+
   const isSuperadmin = req.user?.role === 'superadmin';
 
   const allowedIds = [];

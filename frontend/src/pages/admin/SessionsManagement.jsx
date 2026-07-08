@@ -100,6 +100,46 @@ export default function SessionsManagement() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
 
+  const [visibleCount, setVisibleCount] = useState(20);
+
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [view, dateFilterOption, customDateFilter, selectedTrainerFilter, selectedClassFilter, selectedCategoryFilter]);
+
+  useEffect(() => {
+    const handleScroll = (e) => {
+      // Find the main scrolling container
+      const scrollContainer = document.querySelector('.page-shell') || document.documentElement;
+      
+      const scrollTop = scrollContainer.scrollTop || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      const scrollHeight = scrollContainer.scrollHeight || document.documentElement.scrollHeight || document.body.scrollHeight || 0;
+      const clientHeight = scrollContainer.clientHeight || document.documentElement.clientHeight || window.innerHeight || 0;
+
+      if (scrollTop + clientHeight >= scrollHeight - 800) {
+        setVisibleCount(prev => prev + 20);
+      }
+    };
+    
+    // Listen on window and on the main scrolling container if it exists
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // Also try attaching to a potential scroll container inside a timeout so it's rendered
+    setTimeout(() => {
+      const container = document.querySelector('.page-shell');
+      if (container) {
+        container.addEventListener('scroll', handleScroll, { passive: true });
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      const container = document.querySelector('.page-shell');
+      if (container) {
+        container.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, []);
+
   const filteredSessions = useMemo(() => {
     let result = [...sessions];
 
@@ -364,10 +404,10 @@ export default function SessionsManagement() {
     const eligibleParticipants = participantsList.filter(b => b.status === 'confirmed' || b.status === 'scheduled');
     if (!viewingParticipantsSession || eligibleParticipants.length === 0) return;
     if (!window.confirm(`Send reminder emails to ${eligibleParticipants.length} booked participant(s)?`)) return;
-    
+
     setSendingAllReminders(true);
     try {
-      await Promise.all(eligibleParticipants.map(booking => 
+      await Promise.all(eligibleParticipants.map(booking =>
         api.post(`/bookings/${booking._id}/reminder`)
       ));
       toast.success('Reminders sent successfully!');
@@ -485,7 +525,7 @@ export default function SessionsManagement() {
                         className="fixed inset-0 z-40"
                         onClick={() => {
                           setShowClassDropdown(false);
-                          setClassSearchQuery(''); 
+                          setClassSearchQuery('');
                         }}
                       />
                     )}
@@ -659,17 +699,17 @@ export default function SessionsManagement() {
                 type="button"
                 onClick={() => {
                   setDateFilterOption(opt.id);
-                  setCustomDateFilter(''); 
+                  setCustomDateFilter('');
                 }}
                 className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dateFilterOption === opt.id
-                    ? 'bg-brand-blue text-white shadow-md shadow-brand-blue/15'
-                    : 'bg-slate-50 text-ink/40 hover:bg-slate-100 hover:text-ink/60'
+                  ? 'bg-brand-blue text-white shadow-md shadow-brand-blue/15'
+                  : 'bg-slate-50 text-ink/40 hover:bg-slate-100 hover:text-ink/60'
                   }`}
               >
                 {opt.label}
               </button>
             ))}
-            
+
             <div className="flex items-center gap-3 ml-2">
               <span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Or Select Date:</span>
               <input
@@ -697,7 +737,7 @@ export default function SessionsManagement() {
               <p className="text-sm font-bold text-ink/30 uppercase tracking-widest">Fetching sessions...</p>
             </div>
           ) : filteredSessions.length > 0 ? (
-            filteredSessions.map((session) => (
+            filteredSessions.slice(0, visibleCount).map((session) => (
               <div key={session._id} className={`soft-card rounded-[32px] p-6 hover:shadow-xl transition-all group flex flex-col md:flex-row items-center justify-between gap-6 border ${new Date(session.startTime) < new Date() ? 'bg-slate-50/50 border-slate-200/50' : 'border-slate-100/50'}`}>
                 <div className="flex items-center gap-6 flex-1">
                   <div className={`w-16 h-16 rounded-[24px] flex flex-col items-center justify-center ${new Date(session.startTime) < new Date() ? 'bg-slate-200/50 text-ink/20' : 'bg-brand-blue/5 text-brand-blue'}`}>
@@ -742,10 +782,9 @@ export default function SessionsManagement() {
                           Cancelled
                         </span>
                       )}
-                      {session.trainerId && (
-                        <span className={`px-3 py-1 rounded-full border ${session.trainerStatus === 'accepted' ? 'text-emerald-500 bg-emerald-50 border-emerald-100' :
-                            session.trainerStatus === 'rejected' ? 'text-red-500 bg-red-50 border-red-100' :
-                              'text-amber-500 bg-amber-50 border-amber-100'
+                      {session.trainerId && session.trainerStatus !== 'accepted' && (
+                        <span className={`px-3 py-1 rounded-full border ${session.trainerStatus === 'rejected' ? 'text-red-500 bg-red-50 border-red-100' :
+                            'text-amber-500 bg-amber-50 border-amber-100'
                           }`}>
                           Trainer: {session.trainerStatus || 'pending'}
                         </span>
@@ -938,8 +977,8 @@ export default function SessionsManagement() {
                           </span>
                           {booking.refundStatus && booking.refundStatus !== 'none' && (
                             <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${booking.refundStatus === 'requested' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-                                booking.refundStatus === 'refunded' ? 'bg-rose-50 text-rose-600 border-rose-200' :
-                                  'bg-red-50 text-red-400 border-red-100'
+                              booking.refundStatus === 'refunded' ? 'bg-rose-50 text-rose-600 border-rose-200' :
+                                'bg-red-50 text-red-400 border-red-100'
                               }`}>
                               {booking.refundStatus === 'requested' ? 'Refund Req.' : booking.refundStatus}
                             </span>
@@ -1042,8 +1081,8 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
           ...slot,
           endTime: slot.startTime ? addMinutesToTime(slot.startTime, duration) : ''
         }));
-        return { 
-          ...prev, 
+        return {
+          ...prev,
           durationMinutes: duration,
           timeSlots: updatedSlots
         };
@@ -1084,17 +1123,17 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
 
     const sessions = [];
     const maxOccurrences = parseInt(form.occurences) || 10;
-    
+
     for (const slot of validSlots) {
       const start = new Date(form.startDate + 'T00:00:00');
       const endLimit = form.endDate ? new Date(form.endDate + 'T23:59:59') : null;
       let current = new Date(start);
       const timeArr = slot.startTime.split(':');
-      
+
       const slotSessions = [];
       const maxSessionsForSlot = endLimit ? 500 : maxOccurrences;
       let iterations = 0;
-      
+
       while (slotSessions.length < maxSessionsForSlot && iterations < 500) {
         iterations++;
         if (endLimit && current > endLimit) {
@@ -1104,7 +1143,7 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
         if (form.days.includes(day)) {
           const sessionStart = new Date(current);
           sessionStart.setHours(parseInt(timeArr[0]), parseInt(timeArr[1]), 0, 0);
-          
+
           const sessionEnd = new Date(sessionStart);
           if (slot.endTime) {
             const endTimeArr = slot.endTime.split(':');
@@ -1126,7 +1165,7 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
       }
       sessions.push(...slotSessions);
     }
-    
+
     sessions.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
     setPreview(sessions);
     setStep(2);
@@ -1173,10 +1212,10 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-ink/30 ml-4">Choose Class</label>
-                  <select 
+                  <select
                     className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink"
                     value={form.classId}
-                    onChange={e => setForm({...form, classId: e.target.value})}
+                    onChange={e => setForm({ ...form, classId: e.target.value })}
                   >
                     <option value="">Select Class...</option>
                     {classes.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
@@ -1184,10 +1223,10 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-ink/30 ml-4">Trainer</label>
-                  <select 
+                  <select
                     className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink"
                     value={form.trainerId}
-                    onChange={e => setForm({...form, trainerId: e.target.value})}
+                    onChange={e => setForm({ ...form, trainerId: e.target.value })}
                   >
                     <option value="">Select Trainer...</option>
                     {filteredTrainers.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
@@ -1203,24 +1242,24 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
                     <span className="text-[10px] font-bold text-brand-blue">Duration: {selectedClass.duration}</span>
                   )}
                 </div>
-                
+
                 <div className="space-y-3">
                   {form.timeSlots.map((slot, index) => (
                     <div key={index} className="flex flex-col md:flex-row items-end gap-4 bg-slate-50/50 p-4 rounded-3xl border border-slate-100 animate-in fade-in duration-200">
                       <div className="flex-1 space-y-2 w-full">
                         <label className="text-[9px] font-black uppercase tracking-widest text-ink/30 ml-4">Start Time #{index + 1}</label>
-                        <input 
-                          type="time" 
-                          className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold text-ink outline-none focus:ring-2 focus:ring-brand-blue/20" 
+                        <input
+                          type="time"
+                          className="w-full bg-white border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold text-ink outline-none focus:ring-2 focus:ring-brand-blue/20"
                           value={slot.startTime}
                           onChange={e => handleTimeSlotChange(index, e.target.value)}
                         />
                       </div>
                       <div className="flex-1 space-y-2 w-full">
                         <label className="text-[9px] font-black uppercase tracking-widest text-ink/30 ml-4">End Time (Auto-calculated)</label>
-                        <input 
-                          type="time" 
-                          className="w-full bg-slate-100 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold text-ink/50 cursor-not-allowed outline-none" 
+                        <input
+                          type="time"
+                          className="w-full bg-slate-100 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold text-ink/50 cursor-not-allowed outline-none"
                           value={slot.endTime}
                           disabled
                         />
@@ -1251,11 +1290,11 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
                   </button>
                   <div className="space-y-2 w-full md:w-64">
                     <label className="text-[10px] font-black uppercase tracking-widest text-ink/30 ml-4 block">Total Occurrences</label>
-                    <input 
-                      type="number" 
-                      className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none" 
+                    <input
+                      type="number"
+                      className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none"
                       value={form.occurences}
-                      onChange={e => setForm({...form, occurences: e.target.value})}
+                      onChange={e => setForm({ ...form, occurences: e.target.value })}
                     />
                   </div>
                 </div>
@@ -1269,10 +1308,10 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
                       key={day}
                       type="button"
                       onClick={() => {
-                        const next = form.days.includes(idx) 
+                        const next = form.days.includes(idx)
                           ? form.days.filter(d => d !== idx)
                           : [...form.days, idx];
-                        setForm({...form, days: next});
+                        setForm({ ...form, days: next });
                       }}
                       className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${form.days.includes(idx) ? 'bg-brand-blue text-white shadow-lg' : 'bg-slate-50 text-ink/20 hover:bg-slate-100'}`}
                     >
@@ -1285,30 +1324,30 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
               <div className="grid gap-6 md:grid-cols-3">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-ink/30 ml-4">Start Date</label>
-                  <input 
-                    type="date" 
-                    className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink" 
+                  <input
+                    type="date"
+                    className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink"
                     value={form.startDate}
-                    onChange={e => setForm({...form, startDate: e.target.value})}
+                    onChange={e => setForm({ ...form, startDate: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-ink/30 ml-4">End Date (Optional)</label>
-                  <input 
-                    type="date" 
-                    className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink" 
+                  <input
+                    type="date"
+                    className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink"
                     value={form.endDate}
-                    onChange={e => setForm({...form, endDate: e.target.value})}
+                    onChange={e => setForm({ ...form, endDate: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-ink/30 ml-4">Studio / Room</label>
-                  <input 
-                    type="text" 
-                    className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink" 
+                  <input
+                    type="text"
+                    className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink"
                     placeholder="e.g. Studio A"
                     value={form.room}
-                    onChange={e => setForm({...form, room: e.target.value})}
+                    onChange={e => setForm({ ...form, room: e.target.value })}
                   />
                 </div>
               </div>
@@ -1323,11 +1362,11 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
                 {preview.map((s, i) => (
                   <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="flex items-center gap-4">
-                       <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-ink/30">{i + 1}</span>
-                       <div>
-                         <p className="text-sm font-black text-ink">{new Date(s.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
-                         <p className="text-[10px] font-bold text-ink/30">{new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(s.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                       </div>
+                      <span className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-ink/30">{i + 1}</span>
+                      <div>
+                        <p className="text-sm font-black text-ink">{new Date(s.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                        <p className="text-[10px] font-bold text-ink/30">{new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(s.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
                     </div>
                     <span className="text-[10px] font-black uppercase tracking-tighter text-brand-blue bg-brand-blue/5 px-3 py-1 rounded-full">{selectedClass?.title}</span>
                   </div>
@@ -1340,14 +1379,14 @@ function BulkSessionModal({ onClose, classes, trainers, plans, onCreated, select
         <div className="p-8 md:p-10 border-t border-slate-100 bg-slate-50/30 flex items-center justify-end gap-4">
           <button onClick={onClose} className="px-8 py-3 text-sm font-bold text-ink/40 hover:text-ink transition-all">Cancel</button>
           {step === 1 ? (
-            <button 
+            <button
               onClick={generatePreview}
               className="bg-ink text-white px-10 py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:brightness-110 active:scale-95 shadow-xl transition-all"
             >
               Generate Preview
             </button>
           ) : (
-            <button 
+            <button
               onClick={handleCreate}
               disabled={loading}
               className="bg-brand-blue text-white px-10 py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:brightness-110 active:scale-95 shadow-xl transition-all flex items-center gap-2"

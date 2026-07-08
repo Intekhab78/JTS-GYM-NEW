@@ -11,6 +11,12 @@ const paymentSchema = new mongoose.Schema(
     amount: { type: Number, required: true },
     currency: { type: String },
     paymentMethod: { type: String, default: 'card' },
+    splitDetails: [{
+      method: { type: String },
+      amount: { type: Number }
+    }],
+    tenderedAmount: { type: Number, default: 0 },
+    changeAmount: { type: Number, default: 0 },
     cardBrand: { type: String },
     status: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
     reference: { type: String },

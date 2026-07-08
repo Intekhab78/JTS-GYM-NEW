@@ -22,7 +22,9 @@ export default function SalesDashboard() {
   const [endDate, setEndDate] = useState('');
   
   const [compare, setCompare] = useState(false);
-  const [compareType, setCompareType] = useState('previous_period'); // 'previous_period' or 'previous_year'
+  const [compareType, setCompareType] = useState('previous_period'); // 'previous_period' or 'previous_year' or 'previous_month' or 'custom'
+  const [customCompareStart, setCustomCompareStart] = useState('');
+  const [customCompareEnd, setCustomCompareEnd] = useState('');
 
   // Current Data
   const [salesReport, setSalesReport] = useState([]);
@@ -61,6 +63,19 @@ export default function SalesDashboard() {
         prevStart: prevStart.toISOString().slice(0, 10), 
         prevEnd: prevEnd.toISOString().slice(0, 10) 
       };
+    }
+
+    if (cType === 'previous_month') {
+      const prevStart = new Date(s.getFullYear(), s.getMonth() - 1, s.getDate());
+      const prevEnd = new Date(e.getFullYear(), e.getMonth() - 1, e.getDate());
+      return { 
+        prevStart: prevStart.toISOString().slice(0, 10), 
+        prevEnd: prevEnd.toISOString().slice(0, 10) 
+      };
+    }
+
+    if (cType === 'custom') {
+      return { prevStart: customCompareStart, prevEnd: customCompareEnd };
     }
 
     // Previous Period
@@ -193,8 +208,9 @@ export default function SalesDashboard() {
 
   useEffect(() => {
     if (datePreset === 'custom' && (!startDate || !endDate)) return;
+    if (compare && compareType === 'custom' && (!customCompareStart || !customCompareEnd)) return;
     fetchDashboardData();
-  }, [startDate, endDate, locationId, compare, compareType]);
+  }, [startDate, endDate, locationId, compare, compareType, customCompareStart, customCompareEnd]);
 
   const handleStartDateChange = (e) => { setStartDate(e.target.value); setDatePreset('custom'); setCurrentPage(1); };
   const handleEndDateChange = (e) => { setEndDate(e.target.value); setDatePreset('custom'); setCurrentPage(1); };
@@ -203,10 +219,29 @@ export default function SalesDashboard() {
   const calcTotals = (detailed) => {
     const totalRev = detailed.reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0);
     const totalTx = detailed.length;
+    
+    let cash = 0;
+    let card = 0;
+    let online = 0;
+    let coupon = 0;
+
+    detailed.forEach(item => {
+      const amt = Number(item.totalAmount) || 0;
+      const mode = (item.paymentMode || '').toUpperCase();
+      
+      if (mode === 'CASH') cash += amt;
+      else if (mode === 'ONLINE' || mode === 'WEBSITE') online += amt;
+      else card += amt;
+
+      const disc = Number(item.discount) || 0;
+      if (disc > 0) coupon += disc;
+    });
+
     return {
       revenue: totalRev,
       transactions: totalTx,
-      avg: totalTx > 0 ? (totalRev / totalTx) : 0
+      avg: totalTx > 0 ? (totalRev / totalTx) : 0,
+      tenders: { cash, card, online, coupon }
     };
   };
 
@@ -231,34 +266,96 @@ export default function SalesDashboard() {
     const groupType = (datePreset === 'year' || datePreset === 'all') ? 'Monthly' : 'Daily';
     
     let currFiltered = salesReport.filter(item => item.type === groupType).sort((a, b) => new Date(a.date) - new Date(b.date));
-    let prevFiltered = prevSalesReport.filter(item => item.type === groupType).sort((a, b) => new Date(a.date) - new Date(b.date));
+    let prevFiltered = compare ? prevSalesReport.filter(item => item.type === groupType).sort((a, b) => new Date(a.date) - new Date(b.date)) : [];
 
-    // Map to a common axis
     const mappedData = [];
-    const maxLen = Math.max(currFiltered.length, prevFiltered.length);
 
-    for (let i = 0; i < maxLen; i++) {
-      const cItem = currFiltered[i];
-      const pItem = prevFiltered[i];
-      
-      let label = `Period ${i+1}`;
-      if (groupType === 'Monthly') {
-        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        label = cItem ? months[new Date(cItem.date + '-01').getMonth()] : (pItem ? months[new Date(pItem.date + '-01').getMonth()] : label);
+    if (groupType === 'Monthly') {
+      if (datePreset === 'year') {
+         for (let i=0; i<12; i++) {
+           const monthStr = (i+1).toString().padStart(2, '0');
+           const cItem = currFiltered.find(x => x.date.endsWith(`-${monthStr}`));
+           const pItem = prevFiltered.find(x => x.date.endsWith(`-${monthStr}`));
+           const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+           
+           mappedData.push({
+             name: months[i],
+             CurrentRevenue: cItem ? cItem.amount : 0,
+             PrevRevenue: compare ? (pItem ? pItem.amount : 0) : null,
+             origDateCurr: cItem ? cItem.dateDisplay : `${months[i]} Current`,
+             origDatePrev: pItem ? pItem.dateDisplay : `${months[i]} Prev`
+           });
+         }
       } else {
-        label = cItem ? new Date(cItem.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : `Day ${i+1}`;
+         const maxLen = Math.max(currFiltered.length, prevFiltered.length);
+         for (let i = 0; i < maxLen; i++) {
+           const cItem = currFiltered[i];
+           const pItem = prevFiltered[i];
+           let label = `Period ${i+1}`;
+           const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+           label = cItem ? months[new Date(cItem.date + '-01').getMonth()] : (pItem ? months[new Date(pItem.date + '-01').getMonth()] : label);
+           mappedData.push({
+             name: label,
+             CurrentRevenue: cItem ? cItem.amount : 0,
+             PrevRevenue: compare ? (pItem ? pItem.amount : 0) : null,
+             origDateCurr: cItem ? cItem.dateDisplay : label,
+             origDatePrev: pItem ? pItem.dateDisplay : label
+           });
+         }
       }
-
-      mappedData.push({
-        name: label,
-        CurrentRevenue: cItem ? cItem.amount : 0,
-        PrevRevenue: pItem ? pItem.amount : null, // null so it doesn't draw a line if missing
-        origDateCurr: cItem ? cItem.dateDisplay : null,
-        origDatePrev: pItem ? pItem.dateDisplay : null
-      });
+    } else {
+      if (startDate && endDate) {
+         const start = new Date(startDate);
+         const end = new Date(endDate);
+         const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24)) + 1;
+         
+         const { prevStart } = calculatePrevDates(startDate, endDate, compareType);
+         const pStart = new Date(prevStart);
+         
+         for (let i = 0; i < diffDays; i++) {
+           const cDate = new Date(start);
+           cDate.setDate(cDate.getDate() + i);
+           const cDateStr = cDate.toISOString().slice(0,10);
+           
+           let pDateStr = null;
+           let pLabel = null;
+           if (!isNaN(pStart.getTime())) {
+             const pDate = new Date(pStart);
+             pDate.setDate(pDate.getDate() + i);
+             pDateStr = pDate.toISOString().slice(0,10);
+             pLabel = pDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+           }
+           
+           const cItem = currFiltered.find(x => x.date === cDateStr);
+           const pItem = pDateStr ? prevFiltered.find(x => x.date === pDateStr) : null;
+           
+           const cLabel = cDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+           
+           mappedData.push({
+             name: cLabel,
+             CurrentRevenue: cItem ? cItem.amount : 0,
+             PrevRevenue: compare ? (pItem ? pItem.amount : 0) : null,
+             origDateCurr: cLabel,
+             origDatePrev: (compare && pLabel) ? pLabel : null
+           });
+         }
+      } else {
+         const maxLen = Math.max(currFiltered.length, prevFiltered.length);
+         for (let i = 0; i < maxLen; i++) {
+           const cItem = currFiltered[i];
+           const pItem = prevFiltered[i];
+           mappedData.push({
+             name: `Day ${i+1}`,
+             CurrentRevenue: cItem ? cItem.amount : 0,
+             PrevRevenue: compare ? (pItem ? pItem.amount : 0) : null,
+             origDateCurr: cItem ? cItem.dateDisplay : `Day ${i+1}`,
+             origDatePrev: pItem ? pItem.dateDisplay : `Day ${i+1}`
+           });
+         }
+      }
     }
     return mappedData;
-  }, [salesReport, prevSalesReport, datePreset, compare]);
+  }, [salesReport, prevSalesReport, datePreset, compare, startDate, endDate, compareType]);
 
   const capacityChartData = useMemo(() => {
     if (capacityTab === 'classes') {
@@ -395,13 +492,32 @@ export default function SalesDashboard() {
               </label>
 
               {compare && (
-                <div className="flex gap-2">
-                  <button onClick={() => setCompareType('previous_period')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${compareType === 'previous_period' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-ink/40 hover:bg-slate-200'}`}>
-                    Previous Period
-                  </button>
-                  <button onClick={() => setCompareType('previous_year')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${compareType === 'previous_year' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-ink/40 hover:bg-slate-200'}`}>
-                    Previous Year
-                  </button>
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <button onClick={() => setCompareType('previous_period')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${compareType === 'previous_period' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-ink/40 hover:bg-slate-200'}`}>
+                      Previous Period
+                    </button>
+                    <button onClick={() => setCompareType('previous_month')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${compareType === 'previous_month' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-ink/40 hover:bg-slate-200'}`}>
+                      Previous Month
+                    </button>
+                    <button onClick={() => setCompareType('previous_year')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${compareType === 'previous_year' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-ink/40 hover:bg-slate-200'}`}>
+                      Previous Year
+                    </button>
+                    <button onClick={() => setCompareType('custom')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${compareType === 'custom' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-ink/40 hover:bg-slate-200'}`}>
+                      Custom
+                    </button>
+                  </div>
+                  {compareType === 'custom' && (
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <input type="date" value={customCompareStart} onChange={(e) => setCustomCompareStart(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-[10px] font-bold text-ink focus:ring-2 focus:ring-brand-blue/10 outline-none" placeholder="Start Date" />
+                      </div>
+                      <span className="text-[10px] font-bold text-ink/40">TO</span>
+                      <div>
+                        <input type="date" value={customCompareEnd} onChange={(e) => setCustomCompareEnd(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-[10px] font-bold text-ink focus:ring-2 focus:ring-brand-blue/10 outline-none" placeholder="End Date" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -427,6 +543,34 @@ export default function SalesDashboard() {
             <p className="text-xs font-bold text-ink/40 uppercase tracking-widest">Avg Transaction</p>
             <p className={`mt-3 text-4xl font-black text-ink ${loading ? 'animate-pulse' : ''}`}>{loading ? '—' : formatCurrency(currStats.avg)}</p>
             {renderGrowthBadge(currStats.avg, prevStats.avg)}
+          </div>
+        </section>
+
+        {/* Tender Breakdown Cards */}
+        <section className="grid gap-4 md:grid-cols-4 mb-8">
+          <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-200/60 relative overflow-hidden group">
+            <div className="absolute -right-6 -top-6 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-all duration-500" />
+            <p className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">Cash Tender</p>
+            <p className={`mt-2 text-2xl font-black text-ink ${loading ? 'animate-pulse' : ''}`}>{loading ? '—' : formatCurrency(currStats.tenders?.cash)}</p>
+            {renderGrowthBadge(currStats.tenders?.cash, prevStats.tenders?.cash)}
+          </div>
+          <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-200/60 relative overflow-hidden group">
+            <div className="absolute -right-6 -top-6 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-all duration-500" />
+            <p className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">Card Tender</p>
+            <p className={`mt-2 text-2xl font-black text-ink ${loading ? 'animate-pulse' : ''}`}>{loading ? '—' : formatCurrency(currStats.tenders?.card)}</p>
+            {renderGrowthBadge(currStats.tenders?.card, prevStats.tenders?.card)}
+          </div>
+          <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-200/60 relative overflow-hidden group">
+            <div className="absolute -right-6 -top-6 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-all duration-500" />
+            <p className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">Online Tender</p>
+            <p className={`mt-2 text-2xl font-black text-ink ${loading ? 'animate-pulse' : ''}`}>{loading ? '—' : formatCurrency(currStats.tenders?.online)}</p>
+            {renderGrowthBadge(currStats.tenders?.online, prevStats.tenders?.online)}
+          </div>
+          <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-200/60 relative overflow-hidden group">
+            <div className="absolute -right-6 -top-6 w-32 h-32 bg-rose-500/5 rounded-full blur-2xl group-hover:bg-rose-500/10 transition-all duration-500" />
+            <p className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">Coupon / Voucher</p>
+            <p className={`mt-2 text-2xl font-black text-ink ${loading ? 'animate-pulse' : ''}`}>{loading ? '—' : formatCurrency(currStats.tenders?.coupon)}</p>
+            {renderGrowthBadge(currStats.tenders?.coupon, prevStats.tenders?.coupon)}
           </div>
         </section>
 
@@ -531,9 +675,9 @@ export default function SalesDashboard() {
                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)', padding: '16px' }}
                     labelStyle={{ fontSize: '11px', fontWeight: 900, color: '#0f172a', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}
                     itemStyle={{ fontSize: '14px', fontWeight: 700 }}
-                    formatter={(value, name) => {
-                      if (name === 'CurrentRevenue') return [`AED ${value}`, 'Current Revenue'];
-                      if (name === 'PrevRevenue') return [`AED ${value}`, 'Previous Revenue'];
+                    formatter={(value, name, props) => {
+                      if (name === 'CurrentRevenue') return [`AED ${value}`, `Current (${props.payload.origDateCurr || props.payload.name})`];
+                      if (name === 'PrevRevenue') return [`AED ${value}`, `Previous (${props.payload.origDatePrev || 'N/A'})`];
                       return [`AED ${value}`, name];
                     }}
                   />

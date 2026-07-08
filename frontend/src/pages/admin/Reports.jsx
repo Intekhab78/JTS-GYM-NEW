@@ -77,6 +77,10 @@ export default function Reports() {
               .trim();
             
             mode = (cleaned === 'center' || !cleaned) ? 'CASH' : cleaned.toUpperCase();
+
+            if (mode === 'SPLIT' && item.splitDetails && item.splitDetails.length > 0) {
+              mode = item.splitDetails.map(sd => `${sd.method.replace('center_', '').toUpperCase()} (${sd.amount})`).join(' + ');
+            }
           }
 
           return {

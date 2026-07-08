@@ -24,6 +24,13 @@ function formatPaymentMethod(payment) {
   
   const refText = payment.reference ? ` (#${payment.reference})` : '';
 
+  if (method === 'split' && payment.splitDetails && payment.splitDetails.length > 0) {
+    const details = payment.splitDetails
+      .map(d => `${d.method.replace('center_', '')}: ${d.amount}`)
+      .join(', ');
+    return `Split (${details})`;
+  }
+
   if (method.startsWith('center_')) {
     const actualMethod = method.split('_')[1];
     return `Pay at Center: ${actualMethod.charAt(0).toUpperCase() + actualMethod.slice(1)}${refText}`;
@@ -519,9 +526,31 @@ export default function PaymentsManagement() {
                                     )}
                                   </div>
                                 </div>
+                              ) : payment.planId || payment.membershipId ? (
+                                <div className="space-y-4">
+                                  <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-blue">Purchase Details</h5>
+                                  <div className="space-y-3">
+                                    {payment.planId && (
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-brand-black/40 font-bold">Plan</span>
+                                        <span className="font-black text-brand-black">{payment.planId.name}</span>
+                                      </div>
+                                    )}
+                                    {payment.membershipId && (
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-brand-black/40 font-bold">Membership</span>
+                                        <span className="font-black text-brand-black">{payment.membershipId.planId?.name || 'Membership'}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between items-center text-sm">
+                                      <span className="text-brand-black/40 font-bold">Units</span>
+                                      <span className="font-black text-brand-black">{payment.membershipUnits || 1}</span>
+                                    </div>
+                                  </div>
+                                </div>
                               ) : (
                                 <div className="flex items-center justify-center bg-slate-50 rounded-xl p-8 text-center">
-                                  <p className="text-xs font-bold text-brand-black/30 italic">No enrollment info linked to this payment.</p>
+                                  <p className="text-xs font-bold text-brand-black/30 italic">No enrollment or plan info linked to this payment.</p>
                                 </div>
                               )}
 
@@ -560,15 +589,17 @@ export default function PaymentsManagement() {
                                   </div>
                                 ) : (
                                   <div className="bg-slate-50 rounded-xl p-6 text-center">
-                                     <p className="text-xs font-bold text-brand-black/30 italic mb-3">No invoice found for this payment reference.</p>
-                                     {payment.bookingId && (
+                                     <p className="text-xs font-bold text-brand-black/30 italic mb-3">No invoice document generated.</p>
+                                     {payment.bookingId ? (
                                        <a 
                                          href={`/invoice/booking/${payment.bookingId._id}`}
                                          className="text-[10px] font-black uppercase text-brand-blue hover:underline"
                                        >
                                           Generate / View Receipt →
                                        </a>
-                                     )}
+                                     ) : (payment.planId || payment.membershipId) ? (
+                                        <p className="text-[10px] text-brand-black/40">Receipts for direct plan purchases are sent via email.</p>
+                                     ) : null}
                                   </div>
                                 )}
                               </div>

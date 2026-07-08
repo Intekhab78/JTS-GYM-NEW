@@ -74,36 +74,83 @@ export const getSessions = asyncHandler(async (req, res) => {
   if (classId) filter.classId = classId;
 
   if (trainerId) {
-    // New Logic: Show sessions explicitly assigned to this trainer 
-    // PLUS unassigned (Random) sessions at the trainer's authorized locations.
     const TrainerModel = mongoose.model('Trainer');
     const trainer = await TrainerModel.findById(trainerId);
-    if (trainer && trainer.locationIds && trainer.locationIds.length > 0) {
-      filter.$or = [
-        { trainerId: trainerId },
-        {
-          trainerId: null,
-          locationId: { $in: trainer.locationIds },
-          status: 'scheduled'
-        }
-      ];
+    if (trainer) {
+      // Resolve duplicate trainer profiles that might exist for the same user
+      let query = { _id: trainer._id };
+      if (trainer.userId) query = { userId: trainer.userId };
+      else if (trainer.email) query = { email: trainer.email };
+
+      const duplicateTrainers = await TrainerModel.find(query);
+      const tIds = duplicateTrainers.map(t => t._id);
+      const locIds = duplicateTrainers.reduce((acc, t) => {
+        if (t.locationIds) acc.push(...t.locationIds);
+        return acc;
+      }, []);
+
+      if (locIds.length > 0) {
+        filter.$or = [
+          { trainerId: { $in: tIds } },
+          {
+            trainerId: null,
+            locationId: { $in: locIds },
+            status: 'scheduled'
+          }
+        ];
+      } else {
+        filter.trainerId = { $in: tIds };
+      }
     } else {
       filter.trainerId = trainerId;
     }
   } else if (trainerEmail) {
-    // Robust fallback: verify the trainer's session list by their unique email ID
     const userMatched = await mongoose.model('User').findOne({ email: trainerEmail });
     if (userMatched) {
-      const trainerMatched = await mongoose.model('Trainer').findOne({ userId: userMatched._id });
-      if (trainerMatched) {
-        filter.trainerId = trainerMatched._id;
+      // Find all trainers linked to this user (handles duplicates)
+      const trainersMatched = await mongoose.model('Trainer').find({ userId: userMatched._id });
+      if (trainersMatched.length > 0) {
+        const tIds = trainersMatched.map(t => t._id);
+        const locationIds = trainersMatched.reduce((acc, t) => {
+          if (t.locationIds) acc.push(...t.locationIds);
+          return acc;
+        }, []);
+        
+        if (locationIds.length > 0) {
+          filter.$or = [
+            { trainerId: { $in: tIds } },
+            {
+              trainerId: null,
+              locationId: { $in: locationIds },
+              status: 'scheduled'
+            }
+          ];
+        } else {
+          filter.trainerId = { $in: tIds };
+        }
       }
     }
   } else if (trainerName) {
-    // Secondary fallback: Name-based fuzzy search
     const trainers = await mongoose.model('Trainer').find({ name: { $regex: new RegExp(trainerName, 'i') } });
     if (trainers.length > 0) {
-      filter.trainerId = { $in: trainers.map(t => t._id) };
+      const tIds = trainers.map(t => t._id);
+      const locationIds = trainers.reduce((acc, t) => {
+        if (t.locationIds) acc.push(...t.locationIds);
+        return acc;
+      }, []);
+      
+      if (locationIds.length > 0) {
+        filter.$or = [
+          { trainerId: { $in: tIds } },
+          {
+            trainerId: null,
+            locationId: { $in: locationIds },
+            status: 'scheduled'
+          }
+        ];
+      } else {
+        filter.trainerId = { $in: tIds };
+      }
     }
   }
 
@@ -343,6 +390,7 @@ export const createSession = asyncHandler(async (req, res) => {
     location,
     status: status || 'scheduled',
     locationId,
+    trainerStatus: trainerId ? 'accepted' : 'pending',
     isManual: true
   });
 
@@ -384,9 +432,10 @@ export const updateSession = asyncHandler(async (req, res) => {
     await checkTrainerConflict(res, updateData.trainerId || session.trainerId, start, end, session._id);
   }
 
-  // If trainer was updated, reset trainerStatus to pending
+  // If trainer was updated, auto-accept for single sessions, pending for memberships
   if (updateData.trainerId && updateData.trainerId !== session.trainerId?.toString()) {
-    session.trainerStatus = 'pending';
+    const isMembership = !!session.membershipId || session.classType === 'Plan';
+    session.trainerStatus = isMembership ? 'pending' : 'accepted';
   }
 
   Object.assign(session, updateData);

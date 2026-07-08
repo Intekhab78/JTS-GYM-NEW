@@ -39,7 +39,7 @@ export default function Pricing() {
 
   // Coupon State
   const [couponInput, setCouponInput] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [appliedCoupons, setAppliedCoupons] = useState([]);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
   // Payment State
@@ -171,15 +171,26 @@ export default function Pricing() {
 
   const handleApplyCoupon = async () => {
     if (!couponInput) return;
+    if (!getUser()) {
+      toast.error('Please login to use coupons');
+      setShowCheckout(false);
+      return;
+    }
+    if (appliedCoupons.find(c => c.code === couponInput)) {
+      toast.error('Coupon already applied');
+      return;
+    }
     setIsValidatingCoupon(true);
     setError('');
     try {
       const res = await api.post('/coupons/validate', { code: couponInput });
-      setAppliedCoupon(res.data.data);
-      setMessage(`Coupon applied! Saved ${currency} ${res.data.data.amount}`);
+      const amount = res.data.data ? res.data.data.amount : res.data.amount;
+      const newCoupon = { code: couponInput, amount };
+      setAppliedCoupons(prev => [...prev, newCoupon]);
+      setCouponInput('');
+      setMessage(`Coupon applied! Saved ${currency} ${amount}`);
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid coupon code');
-      setAppliedCoupon(null);
     } finally {
       setIsValidatingCoupon(false);
     }
@@ -242,7 +253,7 @@ export default function Pricing() {
     }
   }, [selectedPromo, multipliedPrice]);
 
-  const currentCouponAmount = appliedCoupon?.amount || 0;
+  const currentCouponAmount = appliedCoupons.reduce((sum, c) => sum + (c.amount || 0), 0);
   const taxableAmount = selectedPlan ? Math.max(0, multipliedPrice - discountAmount - currentCouponAmount - prorationCredit) : 0;
   const currTaxValue = (() => {
     if (!activeTax || !taxableAmount) return 0;
@@ -299,7 +310,8 @@ export default function Pricing() {
         amount: Math.round(finalTotalAmount * 100) / 100,
         discountAmount,
         couponAmount: currentCouponAmount,
-        couponCode: appliedCoupon?.code,
+        couponCode: appliedCoupons.length > 0 ? appliedCoupons.map(c => c.code).join(', ') : undefined,
+        appliedCoupons,
         taxAmount: Math.round(currTaxValue * 100) / 100,
         promotionId: selectedPromo?._id,
         paymentMethod: paymentType,
@@ -321,8 +333,9 @@ export default function Pricing() {
         membershipUnits,
         startDate,
         discountAmount,
-        couponCode: appliedCoupon?.code,
+        couponCode: appliedCoupons.length > 0 ? appliedCoupons.map(c => c.code).join(', ') : undefined,
         couponAmount: currentCouponAmount,
+        appliedCoupons,
         promotionId: selectedPromo?._id,
         upgradeFromMembershipId: upgradeMembership?._id
       });
@@ -855,37 +868,45 @@ export default function Pricing() {
                   {/* Voucher/Coupon Entry */}
                   <div className="pt-6 border-t border-slate-100/50">
                      <label className="text-[10px] font-black uppercase text-ink/30 ml-2 mb-2 block">Gift Voucher / Promo Code</label>
+                     
+                     {appliedCoupons.length > 0 && (
+                       <div className="mb-4 space-y-2">
+                         {appliedCoupons.map((c, i) => (
+                           <div key={i} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200">
+                             <div>
+                               <span className="text-xs font-black uppercase">{c.code}</span>
+                               <span className="text-[10px] text-emerald-600 font-bold ml-2">-{currency}{c.amount}</span>
+                             </div>
+                             <button
+                               onClick={() => {
+                                 const newCoupons = [...appliedCoupons];
+                                 newCoupons.splice(i, 1);
+                                 setAppliedCoupons(newCoupons);
+                               }}
+                               className="text-red-500 text-[10px] font-bold uppercase"
+                             >Remove</button>
+                           </div>
+                         ))}
+                       </div>
+                     )}
+
                      <div className="flex gap-2">
                         <input 
                            type="text"
                            placeholder="Enter code..."
                            value={couponInput}
                            onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                           disabled={appliedCoupon || isValidatingCoupon}
+                           disabled={isValidatingCoupon}
                            className="flex-1 rounded-2xl bg-slate-50 p-4 text-sm font-bold outline-none focus:ring-4 focus:ring-brand-blue/5 uppercase"
                         />
-                        {appliedCoupon ? (
-                           <button 
-                              onClick={() => { setAppliedCoupon(null); setCouponInput(''); }}
-                              className="px-6 rounded-2xl bg-rose-50 text-rose-500 font-black text-[10px] uppercase"
-                           >
-                              Remove
-                           </button>
-                        ) : (
-                           <button 
-                              onClick={handleApplyCoupon}
-                              disabled={!couponInput || isValidatingCoupon}
-                              className="px-6 rounded-2xl bg-ink text-white font-black text-[10px] uppercase shadow-lg disabled:opacity-30"
-                           >
-                              {isValidatingCoupon ? '...' : 'Apply'}
-                           </button>
-                        )}
+                        <button 
+                           onClick={handleApplyCoupon}
+                           disabled={!couponInput || isValidatingCoupon}
+                           className="px-6 rounded-2xl bg-ink text-white font-black text-[10px] uppercase shadow-lg disabled:opacity-30"
+                        >
+                           {isValidatingCoupon ? '...' : 'Add'}
+                        </button>
                      </div>
-                     {appliedCoupon && (
-                        <div className="mt-2 ml-2 flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase">
-                           <span>🎁</span> Voucher Valid: -{currency} {appliedCoupon.amount} Applied
-                        </div>
-                     )}
                   </div>
 
                   {prorationCredit > 0 && (
@@ -1054,12 +1075,13 @@ export default function Pricing() {
                           <span className="text-sm font-black text-emerald-500">- {discountAmount.toLocaleString()} {currency}</span>
                         </div>
                       )}
-                      {appliedCoupon && (
-                        <div className="flex justify-between items-center text-emerald-600 font-bold mb-2">
-                          <span className="text-[10px] uppercase tracking-widest pl-2">Voucher Redeemed</span>
-                          <span className="text-sm">-{currency} {appliedCoupon.amount.toFixed(2)}</span>
+                      
+                      {appliedCoupons.map((c, i) => (
+                        <div key={i} className="flex justify-between items-center mt-3 text-emerald-600 font-bold">
+                          <span className="text-[10px] uppercase tracking-widest">Voucher Applied ({c.code})</span>
+                          <span className="text-sm">-{currency} {c.amount.toFixed(2)}</span>
                         </div>
-                      )}
+                      ))}
 
                       <div className="flex justify-between items-center text-sm font-bold border-t border-slate-200 pt-3">
                         <span className="text-ink/60">

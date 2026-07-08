@@ -90,9 +90,17 @@ const syncPayments = async (user = null, req = {}) => {
           createdAt: b.createdAt,
           isUAT: b.isUAT || false
         });
-      } else if (exists.status === 'pending') {
-        exists.status = 'paid';
-        await exists.save();
+      } else {
+        let changed = false;
+        if (!exists.bookingId) {
+          exists.bookingId = b._id;
+          changed = true;
+        }
+        if (exists.status === 'pending' && b.paymentStatus === 'completed') {
+          exists.status = 'paid';
+          changed = true;
+        }
+        if (changed) await exists.save();
       }
 
       // Heal Invoice records: Ensure confirmed bookings have 'paid' invoices
@@ -244,7 +252,7 @@ export const getAllPayments = asyncHandler(async (req, res) => {
 
 export const createPayment = asyncHandler(async (req, res) => {
   const { bookingId, planId, membershipId, amount, paymentMethod, reference, last4, promotionId, discountAmount, couponAmount, couponCode, userId, processedBy, membershipUnits, isVendorSale, vendorId, vendorSalePrice, vendorMargin } = req.body;
-  if (!amount) {
+  if (amount === undefined || amount === null) {
     res.status(400);
     throw new Error('Amount is required');
   }
@@ -275,7 +283,10 @@ export const createPayment = asyncHandler(async (req, res) => {
     membershipId,
     amount,
     paymentMethod,
-    status: req.body.status || (paymentMethod === 'center' ? 'pending' : 'paid'),
+    splitDetails: req.body.splitDetails || [],
+    tenderedAmount: req.body.tenderedAmount || 0,
+    changeAmount: req.body.changeAmount || 0,
+    status: amount === 0 ? 'paid' : (req.body.status || (paymentMethod === 'center' ? 'pending' : 'paid')),
     reference,
     last4,
     locationId,
@@ -321,8 +332,25 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
   }
 
   const effectiveDiscount = Number(discountAmount ?? booking.discountAmount ?? 0) || 0;
-  const effectiveCouponAmount = Number(couponAmount ?? booking.couponAmount ?? 0) || 0;
-  const effectiveCouponCodeRaw = (couponCode ?? booking.couponCode ?? '').toString().trim();
+  let effectiveCouponAmount = Number(couponAmount ?? booking.couponAmount ?? 0) || 0;
+  let effectiveCouponCodeRaw = (couponCode ?? booking.couponCode ?? '').toString().trim();
+
+  if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+    effectiveCouponCodeRaw = req.body.appliedCoupons.map(c => c.code).join(', ');
+    effectiveCouponAmount = req.body.appliedCoupons.reduce((sum, c) => sum + (c.amount || 0), 0);
+    // Redeem these new coupons
+    for (const c of req.body.appliedCoupons) {
+      const coupon = await mongoose.model('Coupon').findOne({ code: c.code.toUpperCase(), status: 'active' });
+      if (coupon) {
+        coupon.status = 'redeemed';
+        coupon.redeemBookingId = bookingId;
+        coupon.redeemedAt = new Date();
+        if (!coupon.userId && req.user._id) coupon.userId = req.user._id;
+        await coupon.save();
+      }
+    }
+  }
+
   const effectiveCouponCode = effectiveCouponCodeRaw ? effectiveCouponCodeRaw.toUpperCase() : undefined;
   const bookingTotal = Number(booking.totalAmount || classItem.price || 0) || 0;
 
@@ -350,8 +378,6 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
       gb.paymentReference = reference;
       gb.paymentId = created._id;
       gb.paymentDate = new Date();
-      // Only set discount on first one to avoid double counting, or distribute it. 
-      // It's already calculated properly per booking on creation, so we don't strictly need to override here.
       await gb.save();
     }
   } else {
@@ -395,12 +421,25 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
     }
 
     if (effectiveCouponAmount > 0) {
-      cleanedItems.push({
-        description: effectiveCouponCode ? `Cash Voucher Applied (${effectiveCouponCode})` : 'Cash Voucher Applied',
-        quantity: 1,
-        unitPrice: -effectiveCouponAmount,
-        total: -effectiveCouponAmount
-      });
+      if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
+        req.body.appliedCoupons.forEach(c => {
+          if (c.amount > 0) {
+            cleanedItems.push({
+              description: `Cash Voucher Applied (${c.code})`,
+              quantity: 1,
+              unitPrice: -c.amount,
+              total: -c.amount
+            });
+          }
+        });
+      } else {
+        cleanedItems.push({
+          description: effectiveCouponCode ? `Cash Voucher Applied (${effectiveCouponCode})` : 'Cash Voucher Applied',
+          quantity: 1,
+          unitPrice: -effectiveCouponAmount,
+          total: -effectiveCouponAmount
+        });
+      }
     }
 
     invoiceRec.items = cleanedItems;
@@ -428,21 +467,32 @@ export const exportPaymentsCsv = asyncHandler(async (req, res) => {
     .populate('planId', 'name price')
     .sort({ createdAt: -1 });
 
-  const rows = payments.map((p) => ({
-    user: p.userId?.name,
-    email: p.userId?.email,
-    amount: p.amount,
-    status: p.status,
-    plan: p.planId?.name,
-    last4: p.last4,
-    reference: p.reference,
-    createdAt: p.createdAt
-  }));
+  const rows = payments.map((p) => {
+    let methodStr = p.paymentMethod;
+    if (methodStr === 'split' && p.splitDetails?.length > 0) {
+      methodStr = 'Split (' + p.splitDetails.map(d => `${d.method.replace('center_', '')}: ${d.amount}`).join(', ') + ')';
+    } else if (methodStr?.startsWith('center_')) {
+      methodStr = methodStr.replace('center_', '');
+    }
+    
+    return {
+      user: p.userId?.name,
+      email: p.userId?.email,
+      amount: p.amount,
+      method: methodStr,
+      status: p.status,
+      plan: p.planId?.name,
+      last4: p.last4,
+      reference: p.reference,
+      createdAt: p.createdAt
+    };
+  });
 
   const csv = toCsv(rows, [
     { key: 'user', label: 'User' },
     { key: 'email', label: 'Email' },
     { key: 'amount', label: 'Amount' },
+    { key: 'method', label: 'Method' },
     { key: 'status', label: 'Status' },
     { key: 'plan', label: 'Plan' },
     { key: 'last4', label: 'Card Last4' },

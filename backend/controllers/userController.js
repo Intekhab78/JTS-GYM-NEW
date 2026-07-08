@@ -4,7 +4,7 @@ import Trainer from '../models/Trainer.js';
 import Child from '../models/Child.js';
 import mongoose from 'mongoose';
 import { resolveReadLocationId } from '../utils/locationScope.js';
-import { sendAccountUpdateEmail } from '../utils/mailer.js';
+import { sendAccountUpdateEmail, sendWelcomeEmail } from '../utils/mailer.js';
 import bcrypt from 'bcryptjs';
 import { withUAT } from '../middleware/uatMiddleware.js';
 
@@ -37,6 +37,7 @@ export const getUsers = asyncHandler(async (req, res) => {
 
   const users = await User.find(withUAT(req, filter, true))
     .populate('locationIds', 'name')
+    .populate('managerId', 'name role')
     .select('-password')
     .sort({ createdAt: -1 });
   res.json(users);
@@ -58,7 +59,7 @@ export const updateUser = asyncHandler(async (req, res) => {
     throw new Error('User not found');
   }
 
-  const { name, email, phone, role, locationIds, allowUAT, canManageShifts } = req.body;
+  const { name, email, phone, role, locationIds, allowUAT, canManageShifts, managerId } = req.body;
 
   if (email && email !== user.email) {
     const existing = await User.findOne({ email });
@@ -74,6 +75,9 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (role) user.role = role;
   if (allowUAT !== undefined) user.allowUAT = allowUAT;
   if (canManageShifts !== undefined) user.canManageShifts = canManageShifts;
+  if (managerId !== undefined) {
+    user.managerId = managerId || null;
+  }
 
   if (req.user?.role === 'superadmin' && locationIds !== undefined) {
     user.locationIds = locationIds || [];
@@ -104,18 +108,20 @@ export const deleteUser = asyncHandler(async (req, res) => {
     throw new Error('User not found');
   }
 
-  // Dependency Check: ONLY block if there are ACTIVE or FUTURE commitments.
-  const Booking = mongoose.model('Booking');
-  const Membership = mongoose.model('Membership');
+  // Dependency Check: ONLY block if there are ACTIVE or FUTURE commitments AND we are deactivating.
+  if (user.status === 'active') {
+    const Booking = mongoose.model('Booking');
+    const Membership = mongoose.model('Membership');
 
-  const [futureBookingCount, activeMembershipCount] = await Promise.all([
-    Booking.countDocuments({ userId: user._id, date: { $gt: new Date() }, status: 'confirmed' }),
-    Membership.countDocuments({ userId: user._id, endDate: { $gt: new Date() } })
-  ]);
+    const [futureBookingCount, activeMembershipCount] = await Promise.all([
+      Booking.countDocuments({ userId: user._id, date: { $gt: new Date() }, status: { $in: ['pending', 'confirmed'] } }),
+      Membership.countDocuments({ userId: user._id, endDate: { $gt: new Date() }, status: { $in: ['active', 'frozen'] } })
+    ]);
 
-  if (futureBookingCount > 0 || activeMembershipCount > 0) {
-    res.status(400);
-    throw new Error(`Cannot deactivate user: They have ${futureBookingCount} future bookings and ${activeMembershipCount} active memberships. Please cancel these before deactivating.`);
+    if (futureBookingCount > 0 || activeMembershipCount > 0) {
+      res.status(400);
+      throw new Error(`Cannot deactivate user: They have ${futureBookingCount} future/pending bookings and ${activeMembershipCount} active memberships. Please cancel these before deactivating.`);
+    }
   }
 
   // Toggle status
@@ -126,7 +132,7 @@ export const deleteUser = asyncHandler(async (req, res) => {
 });
 
 export const createStaff = asyncHandler(async (req, res) => {
-  const { name, email, password, role, phone, locationIds, allowUAT, canManageShifts } = req.body;
+  const { name, email, password, role, phone, locationIds, allowUAT, canManageShifts, managerId } = req.body;
 
   const userExists = await User.findOne(withUAT(req, { email }, true));
   if (userExists) {
@@ -156,12 +162,17 @@ export const createStaff = asyncHandler(async (req, res) => {
     phone,
     brandIds: req.user.role === 'superadmin' ? (req.body.brandIds || []) : (req.brandId ? [req.brandId] : (req.user.brandIds || [])),
     locationIds: locationIds || (req.user.locationIds && req.user.locationIds.length > 0 ? [req.user.locationIds[0]] : []),
+    managerId: managerId || undefined,
     isUAT: req.isUAT || false,
     allowUAT: allowUAT || false,
     canManageShifts: canManageShifts || false
   });
 
   await syncTrainerProfile(user).catch(err => console.error('Trainer sync failed:', err.message));
+
+  if (user.role === 'customer' || user.role === 'parent') {
+    sendWelcomeEmail(user).catch(err => console.error('Welcome email failed:', err.message));
+  }
 
   res.status(201).json({
     _id: user._id,
@@ -200,13 +211,30 @@ export const lookupUser = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: 'User not found' });
   }
 
+  // SELF-HEALING: If the user is missing the current brand or location, auto-attach them
+  let needsSave = false;
+  const targetBrand = req.brandId || (req.user && req.user.brandIds && req.user.brandIds[0]);
+  if (targetBrand && (!user.brandIds || !user.brandIds.some(id => id.toString() === targetBrand.toString()))) {
+    user.brandIds = [...(user.brandIds || []), targetBrand];
+    needsSave = true;
+  }
+  const targetLocationId = req.headers['x-location-id'] || (req.user && req.user.locationIds && req.user.locationIds[0]);
+  if (targetLocationId && (!user.locationIds || !user.locationIds.some(id => id.toString() === targetLocationId.toString()))) {
+    user.locationIds = [...(user.locationIds || []), targetLocationId];
+    needsSave = true;
+  }
+  
+  if (needsSave) {
+    await user.save();
+  }
+
   const children = await Child.find(withUAT(req, { parentId: user._id }, true));
   res.json({ user, children });
 });
 
 
 export const createWalkingCustomer = asyncHandler(async (req, res) => {
-  const { name, email, phone, children } = req.body;
+  const { name, email, phone, altPhone, gender, address, birthDate, children } = req.body;
 
   if (!name || (!email && !phone)) {
     res.status(400);
@@ -226,20 +254,43 @@ export const createWalkingCustomer = asyncHandler(async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(tempPassword, salt);
 
+    const targetLocationId = req.headers['x-location-id'] || (req.user.locationIds && req.user.locationIds[0]);
     user = await User.create({
       name,
       email: email || undefined,
       phone,
+      altPhone,
+      gender,
+      address,
+      birthDate,
       password: hashedPassword,
-      role: 'parent',
+      role: 'customer',
       status: 'active',
-      locationIds: req.user.locationIds || [],
+      brandIds: req.brandId ? [req.brandId] : (req.user.brandIds || []),
+      locationIds: targetLocationId ? [targetLocationId] : (req.user.locationIds || []),
       isUAT: req.isUAT || false
     });
+
+    sendWelcomeEmail(user).catch(err => console.error('Welcome email failed for walking customer:', err.message));
   } else {
     // Update existing user details if provided and missing
     if (name) user.name = name;
     if (phone) user.phone = phone;
+    if (altPhone) user.altPhone = altPhone;
+    if (gender) user.gender = gender;
+    if (address) user.address = address;
+    if (birthDate) user.birthDate = birthDate;
+    
+    const targetBrand = req.brandId || (req.user.brandIds && req.user.brandIds[0]);
+    if (targetBrand && (!user.brandIds || !user.brandIds.some(id => id.toString() === targetBrand.toString()))) {
+      user.brandIds = [...(user.brandIds || []), targetBrand];
+    }
+    
+    const targetLocationId = req.headers['x-location-id'] || (req.user.locationIds && req.user.locationIds[0]);
+    if (targetLocationId && (!user.locationIds || !user.locationIds.some(id => id.toString() === targetLocationId.toString()))) {
+      user.locationIds = [...(user.locationIds || []), targetLocationId];
+    }
+    
     await user.save();
   }
 
@@ -256,6 +307,9 @@ export const createWalkingCustomer = asyncHandler(async (req, res) => {
         name: childData.name,
         age: childData.age,
         gender: childData.gender || 'male',
+        relationship: childData.relationship,
+        email: childData.email,
+        phone: childData.phone,
         locationId: req.user.locationIds && req.user.locationIds.length > 0 ? req.user.locationIds[0] : undefined,
         isUAT: req.isUAT || false
       });

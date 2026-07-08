@@ -58,18 +58,31 @@ export const getCurrentShiftTotals = async (req, res, next) => {
 
     let expectedCash = 0;
     let expectedCard = 0;
-    let expectedVisa = 0;
-    let expectedMastercard = 0;
+    let expectedCardBrands = {};
     let expectedOnline = 0;
 
     payments.forEach(payment => {
+      if (payment.paymentMethod === 'split' && payment.splitDetails) {
+        payment.splitDetails.forEach(split => {
+          const splitAmount = split.amount || 0;
+          if (split.method === 'cash' || split.method === 'center_cash') {
+            expectedCash += splitAmount;
+          } else if (split.method === 'card' || split.method === 'terminal') {
+            expectedCard += splitAmount;
+          } else {
+            expectedOnline += splitAmount;
+          }
+        });
+        return;
+      }
+
       const amount = payment.amount || 0;
-      if (payment.paymentMethod === 'cash') {
+      if (payment.paymentMethod === 'cash' || payment.paymentMethod === 'center_cash') {
         expectedCash += amount;
       } else if (payment.paymentMethod === 'card' || payment.paymentMethod === 'terminal') {
         expectedCard += amount;
-        if (payment.cardBrand === 'visa') expectedVisa += amount;
-        else if (payment.cardBrand === 'mastercard') expectedMastercard += amount;
+        const brand = payment.cardBrand ? payment.cardBrand.toLowerCase() : 'other';
+        expectedCardBrands[brand] = (expectedCardBrands[brand] || 0) + amount;
       } else {
         expectedOnline += amount;
       }
@@ -79,8 +92,7 @@ export const getCurrentShiftTotals = async (req, res, next) => {
       startingCash: shift.startingCash,
       expectedCash,
       expectedCard,
-      expectedVisa,
-      expectedMastercard,
+      expectedCardBrands,
       expectedOnline
     });
   } catch (error) {
@@ -93,7 +105,7 @@ export const getCurrentShiftTotals = async (req, res, next) => {
 // @access  Private
 export const closeShift = async (req, res, next) => {
   try {
-    const { actualCash, actualVisa, actualMastercard, notes, closingDenominations } = req.body;
+    const { actualCash, actualCardBrands, notes, closingDenominations } = req.body;
 
     const shift = await Shift.findOne({ cashierId: req.user._id, status: 'open' });
     if (!shift) {
@@ -111,18 +123,31 @@ export const closeShift = async (req, res, next) => {
     // Calculate expected totals based on paymentMethod
     let expectedCash = 0;
     let expectedCard = 0;
-    let expectedVisa = 0;
-    let expectedMastercard = 0;
+    let expectedCardBrands = {};
     let expectedOnline = 0;
 
     payments.forEach(payment => {
+      if (payment.paymentMethod === 'split' && payment.splitDetails) {
+        payment.splitDetails.forEach(split => {
+          const splitAmount = split.amount || 0;
+          if (split.method === 'cash' || split.method === 'center_cash') {
+            expectedCash += splitAmount;
+          } else if (split.method === 'card' || split.method === 'terminal') {
+            expectedCard += splitAmount;
+          } else {
+            expectedOnline += splitAmount;
+          }
+        });
+        return;
+      }
+
       const amount = payment.amount || 0;
-      if (payment.paymentMethod === 'cash') {
+      if (payment.paymentMethod === 'cash' || payment.paymentMethod === 'center_cash') {
         expectedCash += amount;
       } else if (payment.paymentMethod === 'card' || payment.paymentMethod === 'terminal') {
         expectedCard += amount;
-        if (payment.cardBrand === 'visa') expectedVisa += amount;
-        else if (payment.cardBrand === 'mastercard') expectedMastercard += amount;
+        const brand = payment.cardBrand ? payment.cardBrand.toLowerCase() : 'other';
+        expectedCardBrands[brand] = (expectedCardBrands[brand] || 0) + amount;
       } else {
         expectedOnline += amount;
       }
@@ -131,10 +156,14 @@ export const closeShift = async (req, res, next) => {
     // Calculate discrepancy (Starting Cash + Payments in Cash - Actual Cash Counted)
     const totalExpectedCashInDrawer = shift.startingCash + expectedCash;
     const cashDiscrepancy = Number(actualCash) - totalExpectedCashInDrawer;
-    const visaDiscrepancy = Number(actualVisa || 0) - expectedVisa;
-    const mastercardDiscrepancy = Number(actualMastercard || 0) - expectedMastercard;
+    let cardDiscrepancyTotal = 0;
+    Object.keys(expectedCardBrands).forEach(brand => {
+      const actual = (actualCardBrands && actualCardBrands[brand]) ? Number(actualCardBrands[brand]) : 0;
+      const expected = expectedCardBrands[brand];
+      if (actual !== expected) cardDiscrepancyTotal += Math.abs(actual - expected);
+    });
 
-    const hasDiscrepancy = cashDiscrepancy !== 0 || visaDiscrepancy !== 0 || mastercardDiscrepancy !== 0;
+    const hasDiscrepancy = cashDiscrepancy !== 0 || cardDiscrepancyTotal !== 0;
 
     if (hasDiscrepancy && !notes) {
       return res.status(400).json({ message: 'A discrepancy was found. Please provide notes to explain the difference before closing.' });
@@ -144,12 +173,10 @@ export const closeShift = async (req, res, next) => {
     shift.status = 'closed';
     shift.expectedCash = expectedCash;
     shift.expectedCard = expectedCard;
-    shift.expectedVisa = expectedVisa;
-    shift.expectedMastercard = expectedMastercard;
+    shift.expectedCardBrands = expectedCardBrands;
     shift.expectedOnline = expectedOnline;
     shift.actualCash = Number(actualCash);
-    shift.actualVisa = Number(actualVisa || 0);
-    shift.actualMastercard = Number(actualMastercard || 0);
+    shift.actualCardBrands = actualCardBrands || {};
     shift.discrepancy = cashDiscrepancy; // keeping main discrepancy as cash, or we could sum them
     if (closingDenominations) shift.closingDenominations = closingDenominations;
     if (notes) shift.notes = notes;
