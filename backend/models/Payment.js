@@ -13,6 +13,7 @@ const paymentSchema = new mongoose.Schema(
     paymentMethod: { type: String, default: 'card' },
     splitDetails: [{
       method: { type: String },
+      brand: { type: String },
       amount: { type: Number }
     }],
     tenderedAmount: { type: Number, default: 0 },

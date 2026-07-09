@@ -255,9 +255,22 @@ export const updatePlan = asyncHandler(async (req, res) => {
     );
   }
 
-  if (Array.isArray(replicateToLocations) && replicateToLocations.length > 0) {
-    const locationsToReplicate = replicateToLocations
-      .filter(locId => locId && mongoose.Types.ObjectId.isValid(locId) && locId.toString() !== plan.locationId?.toString());
+  if (Array.isArray(replicateToLocations)) {
+    const locationsToReplicate = replicateToLocations.filter(locId => locId && mongoose.Types.ObjectId.isValid(locId) && locId.toString() !== plan.locationId?.toString());
+
+    // Deactivate siblings that are no longer selected
+    const siblings = await Plan.find({
+      name: plan.name,
+      isUAT: plan.isUAT || false,
+      locationId: { $ne: plan.locationId }
+    });
+
+    for (const sibling of siblings) {
+      if (!locationsToReplicate.includes(sibling.locationId?.toString())) {
+        sibling.status = 'inactive';
+        await sibling.save();
+      }
+    }
 
     for (const locId of locationsToReplicate) {
       const existing = await Plan.findOne({ name: plan.name, locationId: locId, isUAT: plan.isUAT || false });
@@ -297,7 +310,7 @@ export const updatePlan = asyncHandler(async (req, res) => {
         vendorPrices: plan.vendorPrices,
         locationId: locId,
         isUAT: plan.isUAT || false,
-        status: plan.status || 'active'
+        status: 'active'
       };
 
       if (!existing) {
@@ -307,6 +320,15 @@ export const updatePlan = asyncHandler(async (req, res) => {
         existing.locationId = locId; // ensure location remains correct
         await existing.save();
       }
+    }
+
+    // Deactivate the primary plan itself if its location was unchecked
+    if (!replicateToLocations.includes(plan.locationId?.toString())) {
+      saved.status = 'inactive';
+      await saved.save();
+    } else if (saved.status === 'inactive') {
+      saved.status = 'active';
+      await saved.save();
     }
   }
 

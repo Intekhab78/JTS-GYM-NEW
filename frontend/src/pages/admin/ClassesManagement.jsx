@@ -26,6 +26,7 @@ const emptyForm = {
   status: 'active',
   categoryId: '',
   color: '',
+  locationId: '',
   replicateToLocations: [],
   vendorPrices: []
 };
@@ -52,7 +53,7 @@ export default function ClassesManagement() {
 
   const load = () => {
     setLoading(true);
-    const p1 = api.get('/classes?all=true').then((res) => setClasses(res.data || [])).catch(() => { });
+    const p1 = api.get('/classes?all=true&locationId=all').then((res) => setClasses(res.data || [])).catch(() => { });
     const p2 = api.get('/trainers?all=true').then((res) => setTrainers(res.data || [])).catch(() => { });
     const p3 = api.get('/taxes').then(res => setTaxes(res.data.data || [])).catch(() => {});
     const p4 = api.get('/locations?all=true').then((res) => setLocations(res.data || [])).catch(() => { });
@@ -86,10 +87,12 @@ export default function ClassesManagement() {
       imageUrl: item.imageUrl || '',
       taxId: item.taxId?._id || item.taxId || '',
       categoryId: item.categoryId?._id || item.categoryId || '',
-      creditCost: item.creditCost ?? 1,
       status: item.status || 'active',
       color: item.color || '',
-      replicateToLocations: [],
+      locationId: item.locationId?._id || item.locationId || '',
+      replicateToLocations: classes
+        .filter(c => c.title === item.title && c.locationId && c.status === 'active')
+        .map(c => (c.locationId?._id || c.locationId).toString()),
       vendorPrices: item.vendorPrices?.map(vp => ({
         vendorId: vp.vendorId?._id || vp.vendorId || '',
         price: vp.price || 0,
@@ -464,14 +467,16 @@ export default function ClassesManagement() {
               <p className="text-[8px] text-ink/20 px-3">Enter a URL or upload a local photo for the class cover.</p>
             </div>
             {/* Replicate to other locations */}
-            {locations.length > 1 && (
+            {locations.length > 0 && (
               <div className="rounded-xl border border-orange-200/70 p-3 bg-slate-50/50">
-                <p className="text-[10px] font-bold text-ink/40 uppercase mb-2">Also Add / Copy to Other Locations</p>
+                <p className="text-[10px] font-bold text-ink/40 uppercase mb-2">Available Locations</p>
                 <div className="flex flex-wrap gap-2">
                   {locations
-                    .filter(loc => loc._id !== localStorage.getItem('selectedBranch') && loc.status === 'active')
-                    .map(loc => (
-                      <label key={loc._id} className="flex items-center gap-2 text-xs font-bold text-ink/70 bg-white px-3 py-1.5 rounded-full cursor-pointer border border-slate-100 hover:bg-slate-50 transition-all">
+                    .filter(loc => loc.status === 'active')
+                    .map(loc => {
+                      const isPrimary = form.locationId && loc._id === form.locationId;
+                      return (
+                      <label key={loc._id} className={`flex items-center gap-2 text-xs font-bold text-ink/70 bg-white px-3 py-1.5 rounded-full border border-slate-100 transition-all cursor-pointer hover:bg-slate-50`}>
                         <input
                           type="checkbox"
                           checked={form.replicateToLocations?.includes(loc._id) || false}
@@ -485,7 +490,8 @@ export default function ClassesManagement() {
                         />
                         {loc.name}
                       </label>
-                    ))}
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -513,7 +519,14 @@ export default function ClassesManagement() {
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           {loading ? (
              Array(4).fill(0).map((_, i) => <div key={i} className="h-48 animate-pulse bg-white rounded-3xl" />)
-          ) : classes.map((item) => (
+          ) : classes
+              .filter(c => {
+                const selectedBranch = localStorage.getItem('selectedBranch');
+                if (!selectedBranch || selectedBranch === 'all') return true;
+                const cid = c.locationId?._id || c.locationId;
+                return cid?.toString() === selectedBranch;
+              })
+              .map((item) => (
             <div key={item._id} className="soft-card rounded-[32px] p-6 transition-all hover:shadow-xl group flex flex-col md:flex-row gap-6">
               <div className="w-full md:w-32 h-32 rounded-2xl bg-slate-50 border border-slate-100 shrink-0 overflow-hidden">
                 {item.imageUrl ? (
@@ -530,6 +543,11 @@ export default function ClassesManagement() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="font-display text-xl text-ink leading-tight">{item.title}</h3>
+                    {locations.find(l => l._id === (item.locationId?._id || item.locationId)) && (
+                      <p className="text-xs font-bold text-ink/40 mt-1">
+                        📍 {locations.find(l => l._id === (item.locationId?._id || item.locationId)).name}
+                      </p>
+                    )}
                   <div className="flex gap-2 mt-2">
                     <span className="text-[10px] font-black uppercase tracking-widest text-ocean bg-ocean/5 px-2 py-0.5 rounded-full">{item.ageGroup}</span>
                     {item.minAge || item.maxAge ? (

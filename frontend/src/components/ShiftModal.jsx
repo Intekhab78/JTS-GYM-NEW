@@ -173,12 +173,12 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
                         {formatDenominationLabel(value, currency)}
                       </span>
                       <input
-                        type="number"
-                        min="0"
-                        step="1"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         value={denominations[value]}
-                        onChange={(e) => handleDenominationChange(value, e.target.value)}
-                        className="w-full rounded-xl border-2 border-slate-200 bg-white py-2 px-3 text-center text-sm font-bold text-slate-900 outline-none transition-colors focus:border-brand-blue"
+                        onChange={(e) => handleDenominationChange(value, e.target.value.replace(/\\D/g, ''))}
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white py-2 px-1 text-center text-sm font-bold text-ink outline-none transition-colors focus:border-brand-blue"
                         placeholder="0"
                       />
                       <span className="text-sm font-black text-ink text-right">
@@ -224,7 +224,7 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
                                 min="0"
                                 value={actualCardBrands[brand] || ''}
                                 onChange={(e) => setActualCardBrands(prev => ({...prev, [brand]: e.target.value}))}
-                                className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-12 pr-4 text-sm font-black text-slate-900 outline-none transition-colors focus:border-brand-blue"
+                                className="w-full rounded-xl border-2 border-slate-200 bg-white py-3 pl-12 pr-4 text-sm font-black text-ink outline-none transition-colors focus:border-brand-blue"
                                 placeholder="Actual terminal total..."
                               />
                             </div>

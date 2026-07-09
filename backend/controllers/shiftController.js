@@ -67,8 +67,10 @@ export const getCurrentShiftTotals = async (req, res, next) => {
           const splitAmount = split.amount || 0;
           if (split.method === 'cash' || split.method === 'center_cash') {
             expectedCash += splitAmount;
-          } else if (split.method === 'card' || split.method === 'terminal') {
+          } else if (split.method === 'card' || split.method === 'terminal' || split.method === 'center_card') {
             expectedCard += splitAmount;
+            const brand = split.brand ? split.brand.toLowerCase() : 'other';
+            expectedCardBrands[brand] = (expectedCardBrands[brand] || 0) + splitAmount;
           } else {
             expectedOnline += splitAmount;
           }

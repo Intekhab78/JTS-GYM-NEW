@@ -44,6 +44,7 @@ const invoiceSchema = new mongoose.Schema(
     splitDetails: [
       {
         method: { type: String },
+        brand: { type: String },
         amount: { type: Number }
       }
     ],

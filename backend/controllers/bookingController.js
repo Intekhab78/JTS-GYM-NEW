@@ -894,6 +894,34 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
   const singleTax = activeTax ? calculateTax(singleNet, activeTax) : 0;
   const singleTotal = activeTax?.calculationMethod === 'inclusive' ? singleNet : singleNet + singleTax;
 
+  // Pre-validate ALL bookings for duplicates BEFORE creating anything
+  const targetUserIdForLimit = req.user && req.body.userId ? req.body.userId : (req.user ? req.user._id : undefined);
+  for (const sessionId of resolvedSessionIds) {
+    const targetChildIds = participants.map(p => p.childId).filter(Boolean);
+    const hasSelfBooking = participants.some(p => p.relation === 'Self');
+
+    const duplicateFilter = {
+      sessionId: sessionId,
+      status: { $ne: 'cancelled' },
+      $or: []
+    };
+
+    if (targetChildIds.length > 0) {
+      duplicateFilter.$or.push({ 'participants.childId': { $in: targetChildIds } });
+    }
+    if (hasSelfBooking && targetUserIdForLimit) {
+      duplicateFilter.$or.push({ userId: targetUserIdForLimit, 'participants.relation': 'Self' });
+    }
+
+    if (duplicateFilter.$or.length > 0) {
+      const existingBooking = await Booking.findOne(withUAT(req, duplicateFilter));
+      if (existingBooking) {
+        res.status(400);
+        throw new Error('One or more participants are already booked for one of the selected sessions.');
+      }
+    }
+  }
+
   for (const sessionId of resolvedSessionIds) {
     const sess = await Session.findById(sessionId);
     for (const p of participants) {
