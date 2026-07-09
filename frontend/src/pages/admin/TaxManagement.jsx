@@ -58,11 +58,26 @@ export default function TaxManagement() {
     
     try {
       if (editingTax) {
+        // If editing and they somehow select 'global', we might not want to overwrite all.
+        // It's safer to only allow global on creation, but if they do, we can update this one
+        // and optionally create for others, but let's just keep it simple: 
+        if (formData.locationId === 'global') {
+          toast.error('Global application is only supported for new tax rules.');
+          return;
+        }
         await api.patch(`/taxes/${editingTax._id}`, formData);
         toast.success('Tax updated successfully');
       } else {
-        await api.post('/taxes', formData);
-        toast.success('Tax created successfully');
+        if (formData.locationId === 'global') {
+          const promises = locations.map(loc => 
+            api.post('/taxes', { ...formData, locationId: loc._id })
+          );
+          await Promise.all(promises);
+          toast.success('Tax created globally for all branches');
+        } else {
+          await api.post('/taxes', formData);
+          toast.success('Tax created successfully');
+        }
       }
       resetForm();
       loadData();
@@ -254,8 +269,10 @@ export default function TaxManagement() {
                       className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none"
                       value={formData.locationId}
                       onChange={e => setFormData({...formData, locationId: e.target.value})}
+                      disabled={!!editingTax} // Disable location change when editing to prevent confusion
                     >
-                      <option value="">Select a Branch</option>
+                      <option value="" disabled>Select a Branch</option>
+                      {!editingTax && <option value="global">Global (All Branches)</option>}
                       {locations.map(loc => (
                         <option key={loc._id} value={loc._id}>{loc.name}</option>
                       ))}

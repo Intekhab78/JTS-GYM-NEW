@@ -97,6 +97,12 @@ export const createClass = asyncHandler(async (req, res) => {
     throw new Error('At least one trainer is required');
   }
 
+  const existingMain = await ClassModel.findOne({ title, locationId, brandId: req.brandId, isUAT: req.isUAT || false });
+  if (existingMain) {
+    res.status(400);
+    throw new Error('A class with this title already exists in this location');
+  }
+
   const created = await ClassModel.create({
     title,
     description,
@@ -124,11 +130,20 @@ export const createClass = asyncHandler(async (req, res) => {
     const locationsToReplicate = req.body.replicateToLocations.filter(id => id !== locationId.toString());
     for (const locId of locationsToReplicate) {
       if (mongoose.Types.ObjectId.isValid(locId)) {
-        await ClassModel.create({
-          ...created.toObject(),
-          _id: new mongoose.Types.ObjectId(),
-          locationId: locId
-        });
+        const existingRep = await ClassModel.findOne({ title: created.title, locationId: locId, brandId: req.brandId, isUAT: req.isUAT || false });
+        if (!existingRep) {
+          await ClassModel.create({
+            ...created.toObject(),
+            _id: new mongoose.Types.ObjectId(),
+            locationId: locId
+          });
+        } else {
+          // If it already exists, just make sure it's active and updated
+          Object.assign(existingRep, req.body);
+          existingRep.locationId = locId;
+          existingRep.status = 'active';
+          await existingRep.save();
+        }
       }
     }
   }
@@ -171,6 +186,22 @@ export const updateClass = asyncHandler(async (req, res) => {
 
   if (req.body.replicateToLocations && Array.isArray(req.body.replicateToLocations)) {
     const locationsToReplicate = req.body.replicateToLocations.filter(id => id !== classItem.locationId?.toString());
+    
+    // Deactivate siblings that are no longer selected
+    const siblings = await ClassModel.find({ 
+      title: saved.title, 
+      brandId: saved.brandId, 
+      isUAT: req.isUAT || false,
+      locationId: { $ne: classItem.locationId }
+    });
+
+    for (const sibling of siblings) {
+      if (!locationsToReplicate.includes(sibling.locationId?.toString())) {
+        sibling.status = 'inactive';
+        await sibling.save();
+      }
+    }
+
     for (const locId of locationsToReplicate) {
       if (mongoose.Types.ObjectId.isValid(locId)) {
         // Check if a class with the same title already exists in that location to avoid duplicates
@@ -181,14 +212,25 @@ export const updateClass = asyncHandler(async (req, res) => {
           delete newClassObj.createdAt;
           delete newClassObj.updatedAt;
           newClassObj.locationId = locId;
+          newClassObj.status = 'active'; // ensure new copies are active
           await ClassModel.create(newClassObj);
         } else {
           // If it exists, update it to match the current edits
           Object.assign(existing, req.body);
           existing.locationId = locId; // ensure location remains correct
+          existing.status = 'active'; // revive if it was inactive
           await existing.save();
         }
       }
+    }
+    
+    // Deactivate the primary class itself if its location was unchecked
+    if (!req.body.replicateToLocations.includes(classItem.locationId?.toString())) {
+      saved.status = 'inactive';
+      await saved.save();
+    } else if (saved.status === 'inactive') {
+      saved.status = 'active';
+      await saved.save();
     }
   }
 

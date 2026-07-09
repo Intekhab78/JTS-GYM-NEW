@@ -43,6 +43,7 @@ const emptyForm = {
   allowFreezing: false,
   gender: 'mixed',
   categoryId: '',
+  locationId: '',
   replicateToLocations: [],
   bonuses: [],
   vendorPrices: []
@@ -140,7 +141,10 @@ export default function PricingManagement() {
       sessionsPerWeek: plan.sessionsPerWeek ?? 0,
       gender: plan.gender || 'mixed',
       categoryId: plan.categoryId?._id || plan.categoryId || '',
-      replicateToLocations: [],
+      locationId: plan.locationId?._id || plan.locationId || '',
+      replicateToLocations: plans
+        .filter(p => p.name === plan.name && p.locationId && p.status === 'active')
+        .map(p => (p.locationId?._id || p.locationId).toString()),
       bonuses: plan.bonuses?.map(b => ({
         quantity: b.quantity || 0,
         itemType: b.itemType || 'same',
@@ -754,14 +758,16 @@ export default function PricingManagement() {
               onChange={handleChange}
             />
             {/* Replicate to other locations */}
-            {locations.length > 1 && (
+            {locations.length > 0 && (
               <div className="rounded-xl border border-orange-200/70 p-3 bg-slate-50/50">
-                <p className="text-[10px] font-bold text-ink/40 uppercase mb-2">Also Add / Copy to Other Locations</p>
+                <p className="text-[10px] font-bold text-ink/40 uppercase mb-2">Available Locations</p>
                 <div className="flex flex-wrap gap-2">
                   {locations
-                    .filter(loc => loc._id !== localStorage.getItem('selectedBranch') && loc.status === 'active')
-                    .map(loc => (
-                      <label key={loc._id} className="flex items-center gap-2 text-xs font-bold text-ink/70 bg-white px-3 py-1.5 rounded-full cursor-pointer border border-slate-100 hover:bg-slate-50 transition-all">
+                    .filter(loc => loc.status === 'active')
+                    .map(loc => {
+                      const isPrimary = form.locationId && loc._id === form.locationId;
+                      return (
+                      <label key={loc._id} className={`flex items-center gap-2 text-xs font-bold text-ink/70 bg-white px-3 py-1.5 rounded-full border border-slate-100 transition-all cursor-pointer hover:bg-slate-50`}>
                         <input
                           type="checkbox"
                           checked={form.replicateToLocations?.includes(loc._id) || false}
@@ -775,7 +781,8 @@ export default function PricingManagement() {
                         />
                         {loc.name}
                       </label>
-                    ))}
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -808,6 +815,11 @@ export default function PricingManagement() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-semibold">{plan.name}</p>
+                  {locations.find(l => l._id === (plan.locationId?._id || plan.locationId)) && (
+                    <p className="text-[10px] font-bold text-ink/40 mb-1">
+                      📍 {locations.find(l => l._id === (plan.locationId?._id || plan.locationId)).name}
+                    </p>
+                  )}
                   <p className="text-xs text-ink/70">{plan.validity}</p>
                   <p className="text-xs text-ink/70">
                     {plan.classesIncluded === 0 ? '∞ Unlimited Classes' : (plan.type === 'credit-based' ? `${plan.creditsIncluded} Total Credits` : `${plan.classesIncluded} Classes`)}

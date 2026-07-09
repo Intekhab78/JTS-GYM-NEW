@@ -54,7 +54,8 @@ export default function WalkingBooking() {
   const [cashReceived, setCashReceived] = useState('');
 
   // Split Payment State
-  const [splitAmounts, setSplitAmounts] = useState({ cash: '', card: '', online: '' });
+  const [splitAmounts, setSplitAmounts] = useState({ cash: '', online: '' });
+  const [cardPayments, setCardPayments] = useState([{ brand: '', amount: '' }]);
 
   // Vendor Sales State
   const [vendors, setVendors] = useState([]);
@@ -152,6 +153,69 @@ export default function WalkingBooking() {
       document.removeEventListener('click', handleClick, true);
     };
   }, [step]);
+
+  // Restore state from sessionStorage on mount
+  useEffect(() => {
+    const saved = sessionStorage.getItem('walkingBookingState');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.step > 1 && parsed.step < 8) {
+          if (parsed.step) setStep(parsed.step);
+          if (parsed.customer) setCustomer(parsed.customer);
+          if (parsed.newCustomer) setNewCustomer(parsed.newCustomer);
+          if (parsed.availableChildren) setAvailableChildren(parsed.availableChildren);
+          if (parsed.selectedChildrenIds) setSelectedChildrenIds(parsed.selectedChildrenIds);
+          if (parsed.newChildren) setNewChildren(parsed.newChildren);
+          if (parsed.bookingMode) setBookingMode(parsed.bookingMode);
+          if (parsed.selectedClass) setSelectedClass(parsed.selectedClass);
+          if (parsed.selectedPlan) setSelectedPlan(parsed.selectedPlan);
+          if (parsed.selectedLocation) setSelectedLocation(parsed.selectedLocation);
+          if (parsed.selectedTrainer) setSelectedTrainer(parsed.selectedTrainer);
+          if (parsed.sessions) setSessions(parsed.sessions);
+          if (parsed.selectedSessions) setSelectedSessions(parsed.selectedSessions);
+          if (parsed.selectedDateFilter) setSelectedDateFilter(parsed.selectedDateFilter);
+          if (parsed.preferredDays) setPreferredDays(parsed.preferredDays);
+          if (parsed.preferredSlots) setPreferredSlots(parsed.preferredSlots);
+          if (parsed.sessionsPerWeek) setSessionsPerWeek(parsed.sessionsPerWeek);
+          if (parsed.paymentMethods) setPaymentMethods(parsed.paymentMethods);
+          if (parsed.transactionId) setTransactionId(parsed.transactionId);
+          if (parsed.applicablePromos) setApplicablePromos(parsed.applicablePromos);
+          if (parsed.selectedPromo !== undefined) setSelectedPromo(parsed.selectedPromo);
+          if (parsed.couponCode) setCouponCode(parsed.couponCode);
+          if (parsed.couponAmount) setCouponAmount(parsed.couponAmount);
+          if (parsed.appliedCoupons) setAppliedCoupons(parsed.appliedCoupons);
+          if (parsed.bogoOption !== undefined) setBogoOption(parsed.bogoOption);
+          if (parsed.cashReceived) setCashReceived(parsed.cashReceived);
+          if (parsed.splitAmounts) setSplitAmounts(parsed.splitAmounts);
+          if (parsed.cardPayments) setCardPayments(parsed.cardPayments);
+          if (parsed.isVendorSale !== undefined) setIsVendorSale(parsed.isVendorSale);
+          if (parsed.selectedVendorId) setSelectedVendorId(parsed.selectedVendorId);
+          toast.success("Restored your booking progress!");
+        }
+      } catch (e) {
+        console.error("Failed to restore walking booking state", e);
+        sessionStorage.removeItem('walkingBookingState');
+      }
+    }
+  }, []);
+
+  // Save state to sessionStorage on change
+  useEffect(() => {
+    if (step > 1 && step < 8) {
+      const stateToSave = {
+        step, customer, newCustomer, availableChildren, selectedChildrenIds, newChildren,
+        bookingMode, selectedClass, selectedPlan, selectedLocation, selectedTrainer,
+        sessions, selectedSessions, selectedDateFilter, preferredDays, preferredSlots,
+        sessionsPerWeek, paymentMethods, transactionId, applicablePromos, selectedPromo,
+        couponCode, couponAmount, appliedCoupons, bogoOption, cashReceived, splitAmounts,
+        cardPayments, isVendorSale, selectedVendorId
+      };
+      sessionStorage.setItem('walkingBookingState', JSON.stringify(stateToSave));
+    } else if (step === 1 || step >= 8) {
+      sessionStorage.removeItem('walkingBookingState');
+    }
+  }, [step, customer, newCustomer, availableChildren, selectedChildrenIds, newChildren, bookingMode, selectedClass, selectedPlan, selectedLocation, selectedTrainer, sessions, selectedSessions, selectedDateFilter, preferredDays, preferredSlots, sessionsPerWeek, paymentMethods, transactionId, applicablePromos, selectedPromo, couponCode, couponAmount, appliedCoupons, bogoOption, cashReceived, splitAmounts, cardPayments, isVendorSale, selectedVendorId]);
 
   // Scroll to top on step change
   useEffect(() => {
@@ -499,6 +563,70 @@ export default function WalkingBooking() {
     }
   };
 
+  const validateSelection = async (item, type) => {
+    const participants = selectedChildrenIds.map(id => id === 'self' ? (customer || newCustomer) : availableChildren.find(c => c._id === id)).filter(Boolean);
+
+    // 1. Gender check
+    const targetGender = item.gender || 'mixed';
+    if (targetGender !== 'mixed') {
+      const invalidGender = participants.find(p => p.gender && p.gender.toLowerCase() !== targetGender.toLowerCase());
+      if (invalidGender) {
+        toast.error(`This ${type} is for ${targetGender}s only. Participant ${invalidGender.name || 'Self'} is not eligible.`);
+        return false;
+      }
+    }
+
+    // 2. Age check
+    if (type === 'class' && item.ageGroup) {
+      const ageGroup = item.ageGroup.toLowerCase();
+      const isAdultClass = ageGroup.includes('adult');
+      const isKidClass = ageGroup.includes('kid') || ageGroup.includes('child');
+      
+      for (const p of participants) {
+        const pDob = p.dob || p.birthDate;
+        const age = p.age || (pDob ? new Date().getFullYear() - new Date(pDob).getFullYear() : null);
+        if (age !== null) {
+          if (isAdultClass && age < 16) {
+             toast.error(`This class is for adults (16+). Participant ${p.name || 'Self'} is ${age} years old.`);
+             return false;
+          }
+          if (isKidClass && age >= 16) {
+             toast.error(`This class is for kids (<16). Participant ${p.name || 'Self'} is ${age} years old.`);
+             return false;
+          }
+        }
+      }
+    }
+
+    // 3. Duplicate check for packages
+    try {
+       const userCheckId = customer?._id;
+       if (userCheckId && type === 'package') {
+         const res = await api.get(`/memberships?userId=${userCheckId}&status=active`);
+         const activeMemberships = res.data || [];
+         const targetChildIds = participants.filter(p => p._id !== userCheckId).map(p => p._id);
+         const hasDuplicate = activeMemberships.some(m => {
+           const isSamePlan = (m.planId?._id || m.planId) === item._id;
+           if (!isSamePlan) return false;
+           // If checking for self
+           if (targetChildIds.length === 0 && !m.childId) return true;
+           // If checking for child
+           if (targetChildIds.includes(m.childId?._id || m.childId)) return true;
+           return false;
+         });
+         
+         if (hasDuplicate) {
+           toast.error(`A selected participant already has an active membership for ${item.name}.`);
+           return false;
+         }
+       }
+    } catch (e) {
+      console.error(e);
+    }
+    
+    return true;
+  };
+
   // Step 2 -> Save new children to DB, then go to Step 3
   const handleSaveParticipants = async () => {
     const hasSelection = selectedChildrenIds.length > 0 || newChildren.length > 0;
@@ -634,20 +762,22 @@ export default function WalkingBooking() {
         }
       }
 
+      const isMultiPayment = paymentMethods.length > 1 || (paymentMethods.includes('card') && cardPayments.length > 1);
+
       const payRes = await api.post('/payments', {
         planId: selectedPlan._id,
         amount: Math.round(totalAmount * 100) / 100,
         discountAmount,
         taxAmount: currentTax,
         membershipUnits,
-        paymentMethod: paymentMethods.length > 1 ? 'split' : (pmMap[paymentMethods[0]] || 'center_cash'),
-        splitDetails: paymentMethods.length > 1 ? [
+        paymentMethod: isMultiPayment ? 'split' : (pmMap[paymentMethods[0]] || 'center_cash'),
+        splitDetails: isMultiPayment ? [
           { method: 'center_cash', amount: Number(splitAmounts.cash) || 0 },
-          { method: 'center_card', amount: Number(splitAmounts.card) || 0 },
+          ...cardPayments.map(cp => ({ method: 'center_card', brand: cp.brand || 'other', amount: Number(cp.amount) || 0 })),
           { method: 'online_bank', amount: Number(splitAmounts.online) || 0 }
         ].filter(s => s.amount > 0) : undefined,
         reference,
-        transactionId: (!paymentMethods.includes('cash') || paymentMethods.length > 1) ? transactionId : undefined,
+        transactionId: (!paymentMethods.includes('cash') || isMultiPayment) ? transactionId : undefined,
         userId: finalUser._id,
         promotionId: selectedPromo?._id,
         appliedCoupons,
@@ -737,15 +867,17 @@ export default function WalkingBooking() {
         }
       }
 
+      const isMultiPayment = paymentMethods.length > 1 || (paymentMethods.includes('card') && cardPayments.length > 1);
+
       const payload = {
         participants,
         classId: selectedClass._id,
         sessions: selectedSessions.map(s => s._id),
         locationId: selectedLocation,
-        paymentMethod: paymentMethods.length > 1 ? 'split' : (paymentMethods[0] === 'cash' ? 'center_cash' : (paymentMethods[0] === 'card' ? 'center_card' : 'online_bank')),
-        splitDetails: paymentMethods.length > 1 ? [
+        paymentMethod: isMultiPayment ? 'split' : (paymentMethods[0] === 'cash' ? 'center_cash' : (paymentMethods[0] === 'card' ? 'center_card' : 'online_bank')),
+        splitDetails: isMultiPayment ? [
           { method: 'center_cash', amount: Number(splitAmounts.cash) || 0 },
-          { method: 'center_card', amount: Number(splitAmounts.card) || 0 },
+          ...cardPayments.map(cp => ({ method: 'center_card', brand: cp.brand || 'other', amount: Number(cp.amount) || 0 })),
           { method: 'online_bank', amount: Number(splitAmounts.online) || 0 }
         ].filter(s => s.amount > 0) : undefined,
         transactionId: (paymentMethods.includes('card') || paymentMethods.includes('online')) ? transactionId : '',
@@ -823,6 +955,11 @@ export default function WalkingBooking() {
       setAborting(false);
     }
   };
+
+  const totalCardAmount = cardPayments.reduce((sum, cp) => sum + (Number(cp.amount) || 0), 0);
+  const enabledCardBrands = locationPaymentSettings?.card 
+    ? Object.entries(locationPaymentSettings.card).filter(([k,v]) => v && k !== 'other').map(([k]) => k)
+    : [];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -1215,7 +1352,9 @@ export default function WalkingBooking() {
                     {classes.map(c => (
                       <div
                         key={c._id}
-                        onClick={() => {
+                        onClick={async () => {
+                          const isValid = await validateSelection(c, 'class');
+                          if (!isValid) return;
                           setSelectedClass(c);
                           if (c.activePromotions?.length > 0) setSelectedPromo(c.activePromotions[0]);
                           else setSelectedPromo(null);
@@ -1299,8 +1438,12 @@ export default function WalkingBooking() {
                     {plans.map(plan => (
                       <div
                         key={plan._id}
-                        onClick={() => {
+                        onClick={async () => {
                           const isSelecting = plan._id !== selectedPlan?._id;
+                          if (isSelecting) {
+                            const isValid = await validateSelection(plan, 'package');
+                            if (!isValid) return;
+                          }
                           setSelectedPlan(isSelecting ? plan : null);
                           if (isSelecting && plan.activePromotions?.length > 0) setSelectedPromo(plan.activePromotions[0]);
                           else if (!isSelecting) setSelectedPromo(null);
@@ -1638,7 +1781,9 @@ export default function WalkingBooking() {
                         return (
                           <button
                             key={s._id}
-                            onClick={() => {
+                            onClick={async () => {
+                              const isValid = await validateSelection(selectedClass, 'class');
+                              if (!isValid) return;
                               if (isSel) setSelectedSessions(selectedSessions.filter(ss => ss._id !== s._id));
                               else { setError(''); setSelectedSessions([...selectedSessions, s]); }
                             }}
@@ -2192,7 +2337,7 @@ export default function WalkingBooking() {
                         </div>
                       )}
 
-                      {paymentMethods.length > 1 && (
+                      {(paymentMethods.length > 1 || paymentMethods.includes('card')) && (
                         <div className="mb-10 p-5 bg-white/5 rounded-[32px] border border-white/10 animate-in fade-in slide-in-from-top-2 space-y-4">
                           <p className="text-xs font-black text-white/40 uppercase tracking-widest px-1">Allocate Amounts</p>
 
@@ -2210,15 +2355,58 @@ export default function WalkingBooking() {
                           )}
 
                           {paymentMethods.includes('card') && (
-                            <div>
-                              <label className="block text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 px-1">Card Portion (AED)</label>
-                              <input
-                                type="number"
-                                className="w-full bg-ink border border-white/20 rounded-xl py-3 px-4 text-sm font-bold text-white focus:ring-2 focus:ring-brand-blue outline-none"
-                                placeholder="0"
-                                value={splitAmounts.card}
-                                onChange={(e) => setSplitAmounts({ ...splitAmounts, card: e.target.value })}
-                              />
+                            <div className="space-y-4">
+                              <label className="block text-[10px] font-black text-white/30 uppercase tracking-[0.2em] px-1">Card Portions (AED)</label>
+                              {cardPayments.map((cp, idx) => (
+                                <div key={idx} className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
+                                  {/* Select & Amount Row */}
+                                  <div className="flex gap-3">
+                                    <select
+                                      className="flex-1 min-w-0 bg-ink border border-white/20 rounded-xl py-3 px-4 text-sm font-bold text-white focus:ring-2 focus:ring-brand-blue outline-none appearance-none"
+                                      value={cp.brand}
+                                      onChange={(e) => {
+                                        const newCp = [...cardPayments];
+                                        newCp[idx].brand = e.target.value;
+                                        setCardPayments(newCp);
+                                      }}
+                                    >
+                                      <option value="" disabled>Select Card...</option>
+                                      {enabledCardBrands.map(b => (
+                                        <option key={b} value={b}>{b.replace(/_/g, ' ').toUpperCase()}</option>
+                                      ))}
+                                      <option value="other">OTHER</option>
+                                    </select>
+                                    
+                                    <input
+                                      type="number"
+                                      className="flex-1 min-w-0 bg-ink border border-white/20 rounded-xl py-3 px-4 text-sm font-bold text-white focus:ring-2 focus:ring-brand-blue outline-none"
+                                      placeholder="Amount"
+                                      value={cp.amount}
+                                      onChange={(e) => {
+                                        const newCp = [...cardPayments];
+                                        newCp[idx].amount = e.target.value;
+                                        setCardPayments(newCp);
+                                      }}
+                                    />
+                                    
+                                    {cardPayments.length > 1 && (
+                                      <button 
+                                        onClick={() => setCardPayments(cardPayments.filter((_, i) => i !== idx))}
+                                        className="w-12 flex items-center justify-center text-white/40 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all border border-transparent hover:border-rose-500/20"
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                              
+                              <button 
+                                onClick={() => setCardPayments([...cardPayments, { brand: '', amount: '' }])}
+                                className="w-full py-3 rounded-2xl border border-dashed border-white/20 text-[10px] font-black text-brand-blue hover:bg-brand-blue/10 hover:border-brand-blue/50 uppercase tracking-widest transition-all"
+                              >
+                                + Add Another Card Split
+                              </button>
                             </div>
                           )}
 
@@ -2239,7 +2427,7 @@ export default function WalkingBooking() {
                             <div className="flex justify-between items-center px-1 mb-2">
                               <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Total Split:</span>
                               <span className="text-sm font-black text-white">
-                                {currency} {((paymentMethods.includes('cash') ? Number(splitAmounts.cash) : 0) + (paymentMethods.includes('card') ? Number(splitAmounts.card) : 0) + (paymentMethods.includes('online') ? Number(splitAmounts.online) : 0)).toFixed(2)}
+                                {currency} {((paymentMethods.includes('cash') ? Number(splitAmounts.cash) : 0) + (paymentMethods.includes('card') ? totalCardAmount : 0) + (paymentMethods.includes('online') ? Number(splitAmounts.online) : 0)).toFixed(2)}
                               </span>
                             </div>
                             <div className="flex justify-between items-center px-1 mb-4">
@@ -2280,8 +2468,9 @@ export default function WalkingBooking() {
                             loading ||
                             paymentMethods.length === 0 ||
                             (paymentMethods.length === 1 && paymentMethods[0] === 'cash' && Number(cashReceived) < (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))) ||
-                            (paymentMethods.length > 1 && ((paymentMethods.includes('cash') ? Number(splitAmounts.cash) : 0) + (paymentMethods.includes('card') ? Number(splitAmounts.card) : 0) + (paymentMethods.includes('online') ? Number(splitAmounts.online) : 0)).toFixed(2) !== (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax)).toFixed(2)) ||
-                            (paymentMethods.length > 1 && paymentMethods.includes('cash') && Number(splitAmounts.cash) > 0 && Number(cashReceived) > 0 && Number(cashReceived) < Number(splitAmounts.cash))
+                            ((paymentMethods.length > 1 || paymentMethods.includes('card')) && ((paymentMethods.includes('cash') ? Number(splitAmounts.cash) : 0) + (paymentMethods.includes('card') ? totalCardAmount : 0) + (paymentMethods.includes('online') ? Number(splitAmounts.online) : 0)).toFixed(2) !== (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax)).toFixed(2)) ||
+                            (paymentMethods.length > 1 && paymentMethods.includes('cash') && Number(splitAmounts.cash) > 0 && Number(cashReceived) > 0 && Number(cashReceived) < Number(splitAmounts.cash)) ||
+                            (paymentMethods.includes('card') && cardPayments.some(cp => !cp.brand || !cp.amount))
                           }
                           className="w-full bg-brand-blue text-white py-6 rounded-[32px] font-display text-xl font-black shadow-xl shadow-brand-blue/20 hover:scale-[1.03] active:scale-[0.97] transition-all disabled:opacity-50"
                         >
@@ -2358,7 +2547,7 @@ export default function WalkingBooking() {
                             </div>
                             <div className="flex items-center gap-3 w-full sm:w-auto">
                               <button
-                                onClick={() => window.open(`/invoice/booking/${b._id}`, '_blank')}
+                                onClick={() => window.open(`/invoice/booking/${createdBookings[0]._id}`, '_blank')}
                                 className="flex-1 sm:flex-initial bg-white px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] text-brand-blue border border-slate-200 hover:bg-brand-blue hover:text-white hover:border-brand-blue transition-all"
                               >
                                 View Invoice
