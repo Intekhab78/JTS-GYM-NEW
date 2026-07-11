@@ -100,45 +100,12 @@ export default function SessionsManagement() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
 
-  const [visibleCount, setVisibleCount] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   useEffect(() => {
-    setVisibleCount(20);
-  }, [view, dateFilterOption, customDateFilter, selectedTrainerFilter, selectedClassFilter, selectedCategoryFilter]);
-
-  useEffect(() => {
-    const handleScroll = (e) => {
-      // Find the main scrolling container
-      const scrollContainer = document.querySelector('.page-shell') || document.documentElement;
-      
-      const scrollTop = scrollContainer.scrollTop || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
-      const scrollHeight = scrollContainer.scrollHeight || document.documentElement.scrollHeight || document.body.scrollHeight || 0;
-      const clientHeight = scrollContainer.clientHeight || document.documentElement.clientHeight || window.innerHeight || 0;
-
-      if (scrollTop + clientHeight >= scrollHeight - 800) {
-        setVisibleCount(prev => prev + 20);
-      }
-    };
-    
-    // Listen on window and on the main scrolling container if it exists
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    
-    // Also try attaching to a potential scroll container inside a timeout so it's rendered
-    setTimeout(() => {
-      const container = document.querySelector('.page-shell');
-      if (container) {
-        container.addEventListener('scroll', handleScroll, { passive: true });
-      }
-    }, 500);
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      const container = document.querySelector('.page-shell');
-      if (container) {
-        container.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, []);
+    setCurrentPage(1);
+  }, [view, dateFilterOption, customDateFilter, selectedTrainerFilter, selectedClassFilter, selectedCategoryFilter, sessions]);
 
   const filteredSessions = useMemo(() => {
     let result = [...sessions];
@@ -221,6 +188,9 @@ export default function SessionsManagement() {
 
     return result;
   }, [sessions, view, dateFilterOption, customDateFilter, selectedTrainerFilter, selectedClassFilter, selectedCategoryFilter]);
+
+  const totalPages = Math.ceil(filteredSessions.length / itemsPerPage);
+  const paginatedSessions = filteredSessions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const load = () => {
     setLoading(true);
@@ -736,8 +706,8 @@ export default function SessionsManagement() {
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-blue border-t-transparent" />
               <p className="text-sm font-bold text-ink/30 uppercase tracking-widest">Fetching sessions...</p>
             </div>
-          ) : filteredSessions.length > 0 ? (
-            filteredSessions.slice(0, visibleCount).map((session) => (
+          ) : paginatedSessions.length > 0 ? (
+            paginatedSessions.map((session) => (
               <div key={session._id} className={`soft-card rounded-[32px] p-6 hover:shadow-xl transition-all group flex flex-col md:flex-row items-center justify-between gap-6 border ${new Date(session.startTime) < new Date() ? 'bg-slate-50/50 border-slate-200/50' : 'border-slate-100/50'}`}>
                 <div className="flex items-center gap-6 flex-1">
                   <div className={`w-16 h-16 rounded-[24px] flex flex-col items-center justify-center ${new Date(session.startTime) < new Date() ? 'bg-slate-200/50 text-ink/20' : 'bg-brand-blue/5 text-brand-blue'}`}>
@@ -847,6 +817,28 @@ export default function SessionsManagement() {
             </div>
           )}
         </div>
+
+        {!loading && totalPages > 1 && (
+          <div className="flex justify-center items-center mt-8 gap-4">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-ink hover:bg-slate-50 disabled:opacity-50 transition-all"
+            >
+              Previous
+            </button>
+            <span className="text-xs font-bold text-ink/50">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-ink hover:bg-slate-50 disabled:opacity-50 transition-all"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </main>
       <Footer />
 

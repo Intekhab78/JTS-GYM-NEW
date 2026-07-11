@@ -12,6 +12,8 @@ export default function BookingManagement() {
   const [filteredBookings, setFilteredBookings] = useState([]);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
   const { can } = usePermissions();
   const { roleSlug } = useParams();
 
@@ -132,6 +134,8 @@ export default function BookingManagement() {
       const q = searchQuery.toLowerCase();
       result = result.filter(b =>
         b.userId?.name?.toLowerCase().includes(q) ||
+        b.userId?.email?.toLowerCase().includes(q) ||
+        b.userId?.phone?.toLowerCase().includes(q) ||
         b.participants?.some(p => p.name?.toLowerCase().includes(q)) ||
         b.classId?.title?.toLowerCase().includes(q) ||
         b.planId?.name?.toLowerCase().includes(q) ||
@@ -170,7 +174,11 @@ export default function BookingManagement() {
     }
 
     setFilteredBookings(result);
+    setCurrentPage(1);
   }, [searchQuery, statusFilter, bookingTypeFilter, refundFilter, dateFilter, locationFilter, bookings]);
+
+  const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
+  const paginatedBookings = filteredBookings.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const isBookingLocked = (booking) => {
     // 1. Lock if status is already 'completed'
@@ -416,7 +424,7 @@ export default function BookingManagement() {
                 </svg>
                 <input
                   type="text"
-                  placeholder="Booking No., Name, Class, or ID…"
+                  placeholder="Booking No., Name, Email, Phone, Class..."
                   className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-8 pr-4 text-xs font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all placeholder:text-ink/20"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
@@ -481,7 +489,7 @@ export default function BookingManagement() {
         <div className="space-y-4">
           {loading ? (
             Array(3).fill(0).map((_, i) => <div key={i} className="h-24 animate-pulse bg-white/50 rounded-3xl" />)
-          ) : filteredBookings.length > 0 ? filteredBookings.map((booking) => (
+          ) : paginatedBookings.length > 0 ? paginatedBookings.map((booking) => (
             <div key={booking._id} className="group relative overflow-hidden rounded-3xl bg-white p-6 shadow-sm border border-slate-100 transition-all hover:shadow-xl hover:translate-y-[-2px]">
               <div className="flex flex-wrap items-center justify-between gap-6 relative z-10">
                 <div className="flex-1">
@@ -722,6 +730,28 @@ export default function BookingManagement() {
             </div>
           )}
         </div>
+
+        {!loading && totalPages > 1 && (
+          <div className="flex justify-center items-center mt-8 gap-4">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-ink hover:bg-slate-50 disabled:opacity-50 transition-all"
+            >
+              Previous
+            </button>
+            <span className="text-xs font-bold text-ink/50">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-ink hover:bg-slate-50 disabled:opacity-50 transition-all"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </main>
       <Footer />
 
