@@ -326,7 +326,7 @@ export const createBooking = asyncHandler(async (req, res) => {
       const existingBooking = await Booking.findOne(withUAT(req, duplicateFilter));
       if (existingBooking) {
         res.status(400);
-        throw new Error('One or more participants are already booked for this session.');
+        throw new Error('You have already booked this session.');
       }
     }
   }
@@ -885,12 +885,16 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
   let totalAmount = 0;
 
   const count = resolvedSessionIds.length * participants.length;
-  const rawBaseAmount = (classItem.price || 0) * count;
+  const rawBaseAmount = (req.body.isVendorSale && req.body.vendorSalePrice !== undefined)
+    ? Number(req.body.vendorSalePrice)
+    : (classItem.price || 0) * count;
+  
+  const basePricePerItem = rawBaseAmount / count;
   
   const dDisc = (discountAmount || 0) / count;
   const dCoup = (couponAmount || 0) / count;
   const activeTax = await Tax.findOne({ locationId, status: 'active' });
-  const singleNet = Math.max(0, (classItem.price || 0) - dDisc - dCoup);
+  const singleNet = Math.max(0, basePricePerItem - dDisc - dCoup);
   const singleTax = activeTax ? calculateTax(singleNet, activeTax) : 0;
   const singleTotal = activeTax?.calculationMethod === 'inclusive' ? singleNet : singleNet + singleTax;
 
@@ -998,7 +1002,18 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     }
     const invoiceNumber = await getInvoiceNum();
     
-    const invoiceItems = [{ description: `${classItem.title} - Group Booking`, quantity: count, unitPrice: classItem.price || 0, total: rawBaseAmount }];
+    let vendorName = '';
+    if (req.body.isVendorSale && req.body.vendorId) {
+      try {
+        const vendor = await mongoose.model('Vendor').findById(req.body.vendorId);
+        if (vendor) vendorName = vendor.companyName || vendor.name;
+      } catch (e) {
+        console.error('Error fetching vendor:', e);
+      }
+    }
+    
+    const invoiceDesc = `${classItem.title} - Group Booking${req.body.isVendorSale ? ` (via ${vendorName || 'Vendor'})` : ''}`;
+    const invoiceItems = [{ description: invoiceDesc, quantity: count, unitPrice: basePricePerItem, total: rawBaseAmount }];
     if (discountAmount > 0) invoiceItems.push({ description: 'Promotion Discount', quantity: 1, unitPrice: -discountAmount, total: -discountAmount });
     
     if (couponAmount > 0) {

@@ -569,7 +569,10 @@ export default function WalkingBooking() {
     // 1. Gender check
     const targetGender = item.gender || 'mixed';
     if (targetGender !== 'mixed') {
-      const invalidGender = participants.find(p => p.gender && p.gender.toLowerCase() !== targetGender.toLowerCase());
+      const invalidGender = participants.find(p => {
+        const pGender = (p.gender || '').toLowerCase();
+        return pGender !== targetGender.toLowerCase();
+      });
       if (invalidGender) {
         toast.error(`This ${type} is for ${targetGender}s only. Participant ${invalidGender.name || 'Self'} is not eligible.`);
         return false;
@@ -578,20 +581,34 @@ export default function WalkingBooking() {
 
     // 2. Age check
     if (type === 'class' && item.ageGroup) {
-      const ageGroup = item.ageGroup.toLowerCase();
-      const isAdultClass = ageGroup.includes('adult');
-      const isKidClass = ageGroup.includes('kid') || ageGroup.includes('child');
+      let minAge = 0;
+      let maxAge = 999;
+      
+      const ageStr = item.ageGroup.toLowerCase().trim();
+      const rangeMatch = ageStr.match(/^(\d+)\s*-\s*(\d+)$/);
+      
+      if (rangeMatch) {
+        minAge = parseInt(rangeMatch[1], 10);
+        maxAge = parseInt(rangeMatch[2], 10);
+      } else if (ageStr.includes('adult')) {
+        minAge = 16;
+      } else if (ageStr.includes('kid') || ageStr.includes('child')) {
+        maxAge = 15;
+      }
       
       for (const p of participants) {
         const pDob = p.dob || p.birthDate;
-        const age = p.age || (pDob ? new Date().getFullYear() - new Date(pDob).getFullYear() : null);
+        let age = p.age;
+        if (age === undefined || age === null || age === '') {
+          age = pDob ? new Date().getFullYear() - new Date(pDob).getFullYear() : null;
+        }
+        
+        // If participant is Self, they are an adult usually unless specified
+        if (age === null && p.relationship === 'Self') age = 30; // Fallback
+        
         if (age !== null) {
-          if (isAdultClass && age < 16) {
-             toast.error(`This class is for adults (16+). Participant ${p.name || 'Self'} is ${age} years old.`);
-             return false;
-          }
-          if (isKidClass && age >= 16) {
-             toast.error(`This class is for kids (<16). Participant ${p.name || 'Self'} is ${age} years old.`);
+          if (age < minAge || age > maxAge) {
+             toast.error(`This class is for ages ${item.ageGroup}. Participant ${p.name || 'Self'} is ${age} years old.`);
              return false;
           }
         }
@@ -770,7 +787,7 @@ export default function WalkingBooking() {
         discountAmount,
         taxAmount: currentTax,
         membershipUnits,
-        paymentMethod: isMultiPayment ? 'split' : (pmMap[paymentMethods[0]] || 'center_cash'),
+        paymentMethod: isVendorSale ? 'vendor' : (isMultiPayment ? 'split' : (pmMap[paymentMethods[0]] || 'center_cash')),
         splitDetails: isMultiPayment ? [
           { method: 'center_cash', amount: Number(splitAmounts.cash) || 0 },
           ...cardPayments.map(cp => ({ method: 'center_card', brand: cp.brand || 'other', amount: Number(cp.amount) || 0 })),
@@ -821,7 +838,7 @@ export default function WalkingBooking() {
       toast.success('Membership package purchased!');
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Purchase failed');
-      toast.error('Purchase failed');
+      toast.error(err.response?.data?.message || 'Purchase failed');
     } finally {
       setLoading(false);
     }
@@ -874,7 +891,7 @@ export default function WalkingBooking() {
         classId: selectedClass._id,
         sessions: selectedSessions.map(s => s._id),
         locationId: selectedLocation,
-        paymentMethod: isMultiPayment ? 'split' : (paymentMethods[0] === 'cash' ? 'center_cash' : (paymentMethods[0] === 'card' ? 'center_card' : 'online_bank')),
+        paymentMethod: isVendorSale ? 'vendor' : (isMultiPayment ? 'split' : (paymentMethods[0] === 'cash' ? 'center_cash' : (paymentMethods[0] === 'card' ? 'center_card' : 'online_bank'))),
         splitDetails: isMultiPayment ? [
           { method: 'center_cash', amount: Number(splitAmounts.cash) || 0 },
           ...cardPayments.map(cp => ({ method: 'center_card', brand: cp.brand || 'other', amount: Number(cp.amount) || 0 })),
@@ -904,7 +921,7 @@ export default function WalkingBooking() {
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.message || err.message || 'Booking failed');
-      toast.error('Booking failed');
+      toast.error(err.response?.data?.message || 'Booking failed');
     } finally {
       setLoading(false);
     }
@@ -1377,6 +1394,9 @@ export default function WalkingBooking() {
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
                               <span className="bg-ocean/10 text-ocean text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full">{c.ageGroup}</span>
+                              {c.gender && c.gender !== 'mixed' && (
+                                <span className="bg-ocean/10 text-ocean text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full">{c.gender} Only</span>
+                              )}
                               {c.activePromotions?.length > 0 && (
                                 <span className="bg-brand-blue/10 text-brand-blue text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg flex items-center gap-1.5">
                                   🔥 {c.activePromotions[0].name}
@@ -1479,6 +1499,11 @@ export default function WalkingBooking() {
                               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500">
                                 {plan.validDays === 'both' ? 'All Days' : plan.validDays === 'weekday' ? 'Weekdays' : 'Weekends'}
                               </span>
+                              {plan.gender && plan.gender !== 'mixed' && (
+                                <span className="rounded-full bg-ocean/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-ocean">
+                                  {plan.gender} Only
+                                </span>
+                              )}
                               {plan.isFeatured && (
                                 <span className="rounded-full bg-brand-blue/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-brand-blue">Best Value</span>
                               )}
@@ -2282,38 +2307,40 @@ export default function WalkingBooking() {
                         </div>
                       )}
 
-                      <div className="space-y-3 mb-10">
-                        {availablePaymentMethods.map((mode) => {
-                          const isSelected = paymentMethods.includes(mode);
-                          return (
-                            <button
-                              key={mode}
-                              onClick={() => {
-                                if (isSelected) {
-                                  if (paymentMethods.length > 1) {
-                                    setPaymentMethods(paymentMethods.filter(m => m !== mode));
-                                  }
-                                } else {
-                                  setPaymentMethods([...paymentMethods, mode]);
-                                }
-                              }}
-                              className={`w-full p-6 rounded-[32px] border-2 transition-all flex items-center justify-between group ${isSelected ? 'border-brand-blue bg-white/10' : 'border-white/5 bg-white/5 hover:border-white/20'}`}
-                            >
-                              <div className="flex items-center gap-5">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl transition-all ${isSelected ? 'bg-brand-blue text-white' : 'bg-white/5 text-white/30 group-hover:text-white'}`}>
-                                  {mode === 'cash' ? '💵' : mode === 'card' ? '💳' : mode === 'coupon' ? '🎫' : mode === 'voucher' ? '🎟️' : '🌐'}
-                                </div>
-                                <span className="font-black uppercase tracking-widest text-xs">{mode}</span>
-                              </div>
-                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-brand-blue text-white shadow-lg' : 'border-white/10'}`}>
-                                {isSelected && '✓'}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      {!isVendorSale && (
+                        <>
+                          <div className="space-y-3 mb-10">
+                            {availablePaymentMethods.map((mode) => {
+                              const isSelected = paymentMethods.includes(mode);
+                              return (
+                                <button
+                                  key={mode}
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      if (paymentMethods.length > 1) {
+                                        setPaymentMethods(paymentMethods.filter(m => m !== mode));
+                                      }
+                                    } else {
+                                      setPaymentMethods([...paymentMethods, mode]);
+                                    }
+                                  }}
+                                  className={`w-full p-6 rounded-[32px] border-2 transition-all flex items-center justify-between group ${isSelected ? 'border-brand-blue bg-white/10' : 'border-white/5 bg-white/5 hover:border-white/20'}`}
+                                >
+                                  <div className="flex items-center gap-5">
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl transition-all ${isSelected ? 'bg-brand-blue text-white' : 'bg-white/5 text-white/30 group-hover:text-white'}`}>
+                                      {mode === 'cash' ? '💵' : mode === 'card' ? '💳' : mode === 'coupon' ? '🎫' : mode === 'voucher' ? '🎟️' : '🌐'}
+                                    </div>
+                                    <span className="font-black uppercase tracking-widest text-xs">{mode}</span>
+                                  </div>
+                                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-brand-blue text-white shadow-lg' : 'border-white/10'}`}>
+                                    {isSelected && '✓'}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
 
-                      {paymentMethods.length === 1 && paymentMethods[0] === 'cash' && (
+                          {paymentMethods.length === 1 && paymentMethods[0] === 'cash' && (
                         <div className="mb-10 p-5 bg-white/5 rounded-[32px] border border-white/10 animate-in fade-in slide-in-from-top-2">
                           <label className="block text-xs font-black text-white/40 uppercase tracking-[0.2em] mb-3 px-1">Cash Received (AED)</label>
                           <input
@@ -2460,17 +2487,21 @@ export default function WalkingBooking() {
                           </div>
                         </div>
                       )}
+                        </>
+                      )}
 
                       <div className="space-y-4">
                         <button
                           onClick={bookingMode === 'package' ? handlePackagePurchase : handleFinalBooking}
                           disabled={
                             loading ||
-                            paymentMethods.length === 0 ||
-                            (paymentMethods.length === 1 && paymentMethods[0] === 'cash' && Number(cashReceived) < (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))) ||
-                            ((paymentMethods.length > 1 || paymentMethods.includes('card')) && ((paymentMethods.includes('cash') ? Number(splitAmounts.cash) : 0) + (paymentMethods.includes('card') ? totalCardAmount : 0) + (paymentMethods.includes('online') ? Number(splitAmounts.online) : 0)).toFixed(2) !== (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax)).toFixed(2)) ||
-                            (paymentMethods.length > 1 && paymentMethods.includes('cash') && Number(splitAmounts.cash) > 0 && Number(cashReceived) > 0 && Number(cashReceived) < Number(splitAmounts.cash)) ||
-                            (paymentMethods.includes('card') && cardPayments.some(cp => !cp.brand || !cp.amount))
+                            (isVendorSale ? !selectedVendorId : (
+                              paymentMethods.length === 0 ||
+                              (paymentMethods.length === 1 && paymentMethods[0] === 'cash' && Number(cashReceived) < (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))) ||
+                              ((paymentMethods.length > 1 || paymentMethods.includes('card')) && ((paymentMethods.includes('cash') ? Number(splitAmounts.cash) : 0) + (paymentMethods.includes('card') ? totalCardAmount : 0) + (paymentMethods.includes('online') ? Number(splitAmounts.online) : 0)).toFixed(2) !== (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax)).toFixed(2)) ||
+                              (paymentMethods.length > 1 && paymentMethods.includes('cash') && Number(splitAmounts.cash) > 0 && Number(cashReceived) > 0 && Number(cashReceived) < Number(splitAmounts.cash)) ||
+                              (paymentMethods.includes('card') && cardPayments.some(cp => !cp.brand || !cp.amount))
+                            ))
                           }
                           className="w-full bg-brand-blue text-white py-6 rounded-[32px] font-display text-xl font-black shadow-xl shadow-brand-blue/20 hover:scale-[1.03] active:scale-[0.97] transition-all disabled:opacity-50"
                         >
@@ -2536,25 +2567,25 @@ export default function WalkingBooking() {
                       </div>
 
                       <div className="grid grid-cols-1 gap-4">
-                        {createdBookings.map((b, i) => (
-                          <div key={i} className="group p-5 rounded-3xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row items-center justify-between hover:bg-white hover:border-brand-blue hover:shadow-lg transition-all gap-4">
-                            <div className="flex items-center gap-5">
-                              <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">📄</div>
-                              <div>
-                                <p className="text-[10px] font-black text-ink/30 uppercase tracking-[0.15em] mb-1">Booking Reference</p>
-                                <p className="text-sm font-black text-brand-blue tracking-wider">{b.bookingNumber}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3 w-full sm:w-auto">
-                              <button
-                                onClick={() => window.open(`/invoice/booking/${createdBookings[0]._id}`, '_blank')}
-                                className="flex-1 sm:flex-initial bg-white px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] text-brand-blue border border-slate-200 hover:bg-brand-blue hover:text-white hover:border-brand-blue transition-all"
-                              >
-                                View Invoice
-                              </button>
+                        <div className="group p-5 rounded-3xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row items-center justify-between hover:bg-white hover:border-brand-blue hover:shadow-lg transition-all gap-4">
+                          <div className="flex items-center gap-5">
+                            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">📄</div>
+                            <div>
+                              <p className="text-[10px] font-black text-ink/30 uppercase tracking-[0.15em] mb-1">Transaction Invoice</p>
+                              <p className="text-sm font-black text-brand-blue tracking-wider">
+                                {createdBookings[0]?.groupId || createdBookings[0]?.bookingNumber || 'INV-GENERATED'}
+                              </p>
                             </div>
                           </div>
-                        ))}
+                          <div className="flex items-center gap-3 w-full sm:w-auto">
+                            <button
+                              onClick={() => window.open(`/invoice/booking/${createdBookings[0]?._id}`, '_blank')}
+                              className="flex-1 sm:flex-initial bg-white px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] text-brand-blue border border-slate-200 hover:bg-brand-blue hover:text-white hover:border-brand-blue transition-all"
+                            >
+                              View Master Invoice
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
