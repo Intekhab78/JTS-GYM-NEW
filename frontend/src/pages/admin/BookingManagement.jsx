@@ -536,7 +536,7 @@ export default function BookingManagement() {
                     </p>
                     {!booking.participants?.some(p => p.relation === 'Self') && (
                       <p className="text-[10px] text-ink/40 font-bold uppercase tracking-widest">
-                        Parent: <span className="text-brand-blue">{booking.userId?.name || 'Guest'}</span>
+                        Customer: <span className="text-brand-blue">{booking.userId?.name || 'Guest'}</span>
                       </p>
                     )}
                     {booking.locationId && (
@@ -562,7 +562,7 @@ export default function BookingManagement() {
                       )}
                       {!booking.processedBy && booking.paymentStatus === 'completed' && (
                         <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest flex items-center gap-1.5 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">
-                          <span>🌐 Source:</span> Website / Parent
+                          <span>🌐 Source:</span> Website / Customer
                         </p>
                       )}
                       {booking.processedByRole && booking.paymentStatus === 'pending' && (

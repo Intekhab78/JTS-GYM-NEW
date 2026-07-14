@@ -17,6 +17,13 @@ const shiftSchema = new mongoose.Schema(
     discrepancy: { type: Number, default: 0 },
     openingDenominations: { type: Object },
     closingDenominations: { type: Object },
+    currentDenominations: { type: Object },
+    denominationExchanges: [{
+      timestamp: { type: Date, default: Date.now },
+      previousDenominations: { type: Object },
+      newDenominations: { type: Object },
+      reason: { type: String }
+    }],
     notes: { type: String }
   },
   { timestamps: true }

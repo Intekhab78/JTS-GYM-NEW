@@ -20,7 +20,8 @@ export const openShift = async (req, res, next) => {
       status: 'open',
       openedAt: new Date(),
       startingCash: Number(startingCash) || 0,
-      openingDenominations
+      openingDenominations,
+      currentDenominations: openingDenominations
     });
 
     res.status(201).json(shift);
@@ -95,7 +96,8 @@ export const getCurrentShiftTotals = async (req, res, next) => {
       expectedCash,
       expectedCard,
       expectedCardBrands,
-      expectedOnline
+      expectedOnline,
+      currentDenominations: shift.currentDenominations
     });
   } catch (error) {
     next(error);
@@ -202,6 +204,55 @@ export const getAllShifts = async (req, res, next) => {
       .sort({ openedAt: -1 });
 
     res.json(shifts);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Exchange denominations without changing total cash
+// @route   PUT /api/shifts/current/denominations
+// @access  Private
+export const exchangeDenominations = async (req, res, next) => {
+  try {
+    const { newDenominations, reason } = req.body;
+
+    const shift = await Shift.findOne({ cashierId: req.user._id, status: 'open' });
+    if (!shift) {
+      return res.status(400).json({ message: 'No open shift found.' });
+    }
+
+    const previousDenominations = shift.currentDenominations || {};
+
+    // Calculate totals to ensure they match
+    let previousTotal = 0;
+    Object.entries(previousDenominations).forEach(([val, count]) => {
+      previousTotal += Number(val) * (Number(count) || 0);
+    });
+
+    let newTotal = 0;
+    Object.entries(newDenominations).forEach(([val, count]) => {
+      newTotal += Number(val) * (Number(count) || 0);
+    });
+
+    if (Math.abs(previousTotal - newTotal) > 0.01) {
+      return res.status(400).json({ 
+        message: 'The total cash amount must remain the same during an exchange.',
+        expected: previousTotal,
+        provided: newTotal
+      });
+    }
+
+    shift.currentDenominations = newDenominations;
+    shift.denominationExchanges.push({
+      timestamp: new Date(),
+      previousDenominations,
+      newDenominations,
+      reason: reason || 'Manual Cash Exchange'
+    });
+
+    await shift.save();
+
+    res.json(shift);
   } catch (error) {
     next(error);
   }

@@ -61,21 +61,23 @@ export default function AdminHeader({ title, description, actions }) {
               </div>
             )}
             {canManageShift && !isExempt && (
-              <button 
-                onClick={() => setIsShiftModalOpen(true)}
-                className={`flex items-center gap-2 backdrop-blur-md px-3 py-1 rounded-full border cursor-pointer hover:opacity-80 transition-all active:scale-95 shadow-sm ml-2 ${
-                  isShiftExpired 
-                    ? 'bg-amber-500/20 border-amber-400 text-amber-100'
-                    : currentShift 
-                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100' 
-                      : 'bg-rose-500/20 border-rose-400 text-rose-100'
-                }`}
-              >
-                <div className={`w-2 h-2 rounded-full ${isShiftExpired ? 'bg-amber-400 animate-pulse' : currentShift ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                <span className="text-[9px] font-black uppercase tracking-[0.1em]">
-                  {isShiftExpired ? 'Shift Expired' : currentShift ? 'Shift Open' : 'Shift Closed'}
-                </span>
-              </button>
+              <>
+                <button 
+                  onClick={() => setIsShiftModalOpen(true)}
+                  className={`flex items-center gap-2 backdrop-blur-md px-3 py-1 rounded-full border cursor-pointer hover:opacity-80 transition-all active:scale-95 shadow-sm ml-2 ${
+                    isShiftExpired 
+                      ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                      : currentShift 
+                        ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100' 
+                        : 'bg-rose-500/20 border-rose-400 text-rose-100'
+                  }`}
+                >
+                  <div className={`w-2 h-2 rounded-full ${isShiftExpired ? 'bg-amber-400 animate-pulse' : currentShift ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+                  <span className="text-[9px] font-black uppercase tracking-[0.1em]">
+                    {isShiftExpired ? 'Shift Expired' : currentShift ? 'Shift Open' : 'Shift Closed'}
+                  </span>
+                </button>
+              </>
             )}
           </div>
           <h1 className="mt-1 font-display text-3xl md:text-4xl capitalize">
@@ -95,6 +97,8 @@ export default function AdminHeader({ title, description, actions }) {
         isExpired={isShiftExpired}
         onShiftChange={refreshShift}
       />
+
+
     </section>
   );
 }

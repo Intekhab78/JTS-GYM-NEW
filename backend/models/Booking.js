@@ -61,6 +61,7 @@ const bookingSchema = new mongoose.Schema(
     taxAmount: { type: Number, default: 0 },
     couponCode: { type: String },
     couponAmount: { type: Number, default: 0 },
+    attachment: { type: String },
     isUAT: { type: Boolean, default: false, index: true }
   },
   { timestamps: true }

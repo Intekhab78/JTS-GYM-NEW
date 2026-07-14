@@ -49,14 +49,30 @@ export const getVendorSales = async (req, res) => {
 
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setUTCHours(0, 0, 0, 0);
+        query.createdAt.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setUTCHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
     }
 
     const sales = await Payment.find(query)
       .populate('userId', 'name email phone')
-      .populate('planId', 'name')
+      .populate('planId', 'name price')
       .populate('membershipId')
+      .populate({
+        path: 'bookingId',
+        select: 'classId planId',
+        populate: [
+          { path: 'classId', select: 'title price' },
+          { path: 'planId', select: 'name price' }
+        ]
+      })
       .sort({ createdAt: -1 });
 
     const totalSalePrice = sales.reduce((acc, curr) => acc + (curr.vendorSalePrice || 0), 0);

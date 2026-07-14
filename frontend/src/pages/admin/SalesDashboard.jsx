@@ -399,7 +399,7 @@ export default function SalesDashboard() {
       ['Total Transactions:', currStats.transactions],
       ['Avg Transaction Value:', currStats.avg],
       [],
-      ['Date', 'Invoice', 'Customer', 'Email', 'Phone', 'Item', 'Qty', 'Unit Price', 'Location', 'Payment Source', 'Payment Mode', 'Discount', 'Total Amount']
+      ['Date', 'Invoice', 'Customer', 'Email', 'Phone', 'Item', 'Qty', 'Base Price', 'Location', 'Payment Source', 'Payment Mode', 'Discount', 'Total Amount']
     ];
 
     detailedSales.forEach(s => {
@@ -716,6 +716,8 @@ export default function SalesDashboard() {
                   <th className="p-4 font-black">Item</th>
                   <th className="p-4 font-black">Location</th>
                   <th className="p-4 font-black">Method</th>
+                  <th className="p-4 font-black text-right">Base Price</th>
+                  <th className="p-4 font-black text-right">Discount</th>
                   <th className="p-4 pr-8 font-black text-right">Amount</th>
                 </tr>
               </thead>
@@ -730,6 +732,8 @@ export default function SalesDashboard() {
                       <td className="p-4 font-bold text-ink">{sale.item}</td>
                       <td className="p-4 text-xs font-bold text-ink/70">{sale.location}</td>
                       <td className="p-4"><span className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-widest ${sale.paymentMode === 'ONLINE' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>{sale.paymentMode}</span></td>
+                      <td className="p-4 text-right font-bold text-ink">{formatCurrency(sale.unitPrice)}</td>
+                      <td className="p-4 text-right font-bold text-rose-500">{sale.discount > 0 ? `-${formatCurrency(sale.discount)}` : '-'}</td>
                       <td className="p-4 pr-8 text-right font-black text-brand-blue">{formatCurrency(sale.totalAmount)}</td>
                     </tr>
                   ))

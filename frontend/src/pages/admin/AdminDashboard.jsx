@@ -46,7 +46,7 @@ export default function AdminDashboard() {
     { to: `${base}/cms`, title: 'Page Builder (CMS)', desc: 'Design website sections visually.', perm: 'settings:view' },
     { to: `${base}/extensions`, title: 'Extension requests', desc: 'Handle missed session reschedule or duration extensions.', perm: 'memberships:view' },
     { to: `${base}/expenses`, title: 'Expense Management', desc: 'Track salaries, equipment, and other expenses.', perm: 'expenses:view' },
-    { to: `${base}/aborted-bookings`, title: 'Aborted Bookings', desc: 'View voided, cancelled, and discarded bookings.', perm: 'reports:view' },
+    { to: `${base}/aborted-bookings`, title: 'Aborted Bookings', desc: 'View voided, cancelled, and discarded bookings.', perm: 'aborted_bookings:view' },
     { to: `${base}/uat`, title: 'UAT Management', desc: 'Isolate test data and promote configs to Live.', role: 'superadmin' }
   ];
 

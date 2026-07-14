@@ -31,6 +31,54 @@ export default function AbortedBookings() {
     fetchBookings();
   }, [page, filterType]);
 
+  const handleDownload = async () => {
+    try {
+      toast.loading('Preparing report...', { id: 'csv-download' });
+      const res = await abortedBookingApi.getAbortedBookings({ page: 1, limit: 10000, type: filterType });
+      const allBookings = res.abortedBookings;
+      
+      if (allBookings.length === 0) {
+        toast.error('No data to export', { id: 'csv-download' });
+        return;
+      }
+
+      const headers = ['Date', 'Time', 'Staff Member', 'Role', 'Customer Name', 'Customer Phone', 'Booking Mode', 'Class Name', 'Type', 'Reason'];
+      const rows = allBookings.map(b => {
+        const d = new Date(b.createdAt);
+        return [
+          d.toLocaleDateString(),
+          d.toLocaleTimeString(),
+          b.cashierId?.name || 'Unknown',
+          b.cashierId?.role || '',
+          b.attemptData?.customerName || 'N/A',
+          b.attemptData?.customerPhone || '',
+          b.attemptData?.bookingMode || 'Unknown',
+          b.attemptData?.className || '',
+          b.type,
+          (b.reason || '').replace(/"/g, '""')
+        ];
+      });
+      
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => `"${row.join('","')}"`)
+      ].join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Aborted_Bookings_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success('Report downloaded', { id: 'csv-download' });
+    } catch (error) {
+      toast.error('Failed to download report', { id: 'csv-download' });
+    }
+  };
+
   const getTypeStyle = (type) => {
     switch(type) {
       case 'Void': return 'bg-rose-100 text-rose-700 border-rose-200';
@@ -50,22 +98,31 @@ export default function AbortedBookings() {
           backTo={`/${roleSlug}`}
         />
 
-        <div className="mt-8 flex gap-3">
-           <button 
-             onClick={() => { setFilterType(''); setPage(1); }}
-             className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${filterType === '' ? 'bg-brand-blue text-white shadow-md' : 'bg-white text-ink/60 border border-slate-200 hover:bg-slate-50'}`}
-           >
-             All
-           </button>
-           {['Cancel', 'Discard', 'Void'].map(t => (
-              <button 
-                key={t}
-                onClick={() => { setFilterType(t); setPage(1); }}
-                className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${filterType === t ? 'bg-brand-blue text-white shadow-md' : 'bg-white text-ink/60 border border-slate-200 hover:bg-slate-50'}`}
-              >
-                {t}
-              </button>
-           ))}
+        <div className="mt-8 flex justify-between items-center">
+          <div className="flex gap-3">
+             <button 
+               onClick={() => { setFilterType(''); setPage(1); }}
+               className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${filterType === '' ? 'bg-brand-blue text-white shadow-md' : 'bg-white text-ink/60 border border-slate-200 hover:bg-slate-50'}`}
+             >
+               All
+             </button>
+             {['Cancel', 'Discard', 'Void'].map(t => (
+                <button 
+                  key={t}
+                  onClick={() => { setFilterType(t); setPage(1); }}
+                  className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${filterType === t ? 'bg-brand-blue text-white shadow-md' : 'bg-white text-ink/60 border border-slate-200 hover:bg-slate-50'}`}
+                >
+                  {t}
+                </button>
+             ))}
+          </div>
+          <button 
+            onClick={handleDownload}
+            className="flex items-center gap-2 px-6 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            Export CSV
+          </button>
         </div>
 
         <div className="mt-6 soft-card overflow-hidden">
