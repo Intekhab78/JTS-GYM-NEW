@@ -11,6 +11,7 @@ import { toast } from 'react-hot-toast';
 import { useBranch } from '../../context/BranchContext.jsx';
 import { getDenominations, formatDenominationLabel } from '../../utils/currencyUtils.js';
 import { abortedBookingApi } from '../../api/abortedBookingApi.js';
+import BookingDenominationModal from '../../components/BookingDenominationModal.jsx';
 
 export default function WalkingBooking() {
   const { currency } = useSettings();
@@ -20,9 +21,26 @@ export default function WalkingBooking() {
   const { selectedBranch } = useBranch();
 
   const [step, setStep] = useState(1);
+  const [maxStepReached, setMaxStepReached] = useState(1);
+  const stepperRef = useRef(null);
+
+  useEffect(() => {
+    if (step === 1) {
+      setMaxStepReached(1);
+    } else if (step > maxStepReached) {
+      setMaxStepReached(step);
+    }
+    if (stepperRef.current) {
+      const y = stepperRef.current.getBoundingClientRect().top + window.scrollY - 100;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [step, maxStepReached]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [paymentMethods, setPaymentMethods] = useState(['cash']);
+  const [paymentMethods, setPaymentMethods] = useState([]);
   const [transactionId, setTransactionId] = useState('');
   const [applicablePromos, setApplicablePromos] = useState([]);
   const [selectedPromo, setSelectedPromo] = useState(null);
@@ -52,6 +70,9 @@ export default function WalkingBooking() {
 
   // Cash Drawer State
   const [cashReceived, setCashReceived] = useState('');
+  const [receivedDenominations, setReceivedDenominations] = useState({});
+  const [changeDenominations, setChangeDenominations] = useState({});
+  const [isDenominationModalOpen, setIsDenominationModalOpen] = useState(false);
 
   // Split Payment State
   const [splitAmounts, setSplitAmounts] = useState({ cash: '', online: '' });
@@ -61,6 +82,9 @@ export default function WalkingBooking() {
   const [vendors, setVendors] = useState([]);
   const [isVendorSale, setIsVendorSale] = useState(false);
   const [selectedVendorId, setSelectedVendorId] = useState('');
+  const [vendorReference, setVendorReference] = useState('');
+  const [attachment, setAttachment] = useState('');
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   // Step 1: Customer Data
   const [searchQuery, setSearchQuery] = useState('');
@@ -869,6 +893,14 @@ export default function WalkingBooking() {
         throw new Error('Please select at least one participant in Step 2.');
       }
 
+      if (isVendorSale && !selectedVendorId) {
+        throw new Error('Please select a vendor.');
+      }
+      
+      if (isVendorSale && (!vendorReference || !vendorReference.trim())) {
+        throw new Error('Vendor Booking No. / Reference is required for vendor sales.');
+      }
+
       // Create Bookings
       const taxableAmount = Math.max(0, currentPrice - discountAmount - couponAmount);
       const totalAmountToPay = activeTax?.calculationMethod === 'inclusive' ? taxableAmount : (taxableAmount + currentTax);
@@ -906,8 +938,12 @@ export default function WalkingBooking() {
         appliedCoupons,
         couponCode,
         couponAmount,
+        receivedDenominations: paymentMethods.includes('cash') ? receivedDenominations : undefined,
+        changeDenominations: paymentMethods.includes('cash') ? changeDenominations : undefined,
         isVendorSale,
         vendorId: isVendorSale && selectedVendorId ? selectedVendorId : undefined,
+        vendorReference: isVendorSale ? vendorReference : undefined,
+        attachment: isVendorSale && attachment ? attachment : undefined,
         vendorSalePrice: isVendorSale ? currentPrice : undefined,
         vendorMargin: isVendorSale ? ((selectedClass?.price * participants.length * selectedSessions.length) - currentPrice) : undefined,
         tenderedAmount,
@@ -988,7 +1024,7 @@ export default function WalkingBooking() {
           backTo={`/${roleSlug}`}
         />
 
-        <div className="mt-8 max-w-4xl mx-auto">
+        <div ref={stepperRef} className="mt-8 max-w-4xl mx-auto">
           {/* Progress Indicator */}
           <div className="flex justify-between mb-12 px-4 relative">
             <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-200 -z-10 -translate-y-1/2 rounded-full"></div>
@@ -1322,7 +1358,13 @@ export default function WalkingBooking() {
                 </div>
 
                 <div className="mt-16 flex justify-between items-center">
-                  <button onClick={() => setShowAbortModal(true)} className="text-sm font-bold text-ink/40 hover:text-ink px-6">Back</button>
+                  <button onClick={() => {
+                    if (maxStepReached >= 3) {
+                      setShowAbortModal(true);
+                    } else {
+                      setStep(1);
+                    }
+                  }} className="text-sm font-bold text-ink/40 hover:text-ink px-6">Back to Search</button>
                   <div className="flex flex-col items-end gap-2">
                     {newChildren.length > 0 && (
                       <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-1.5">
@@ -1373,6 +1415,7 @@ export default function WalkingBooking() {
                           const isValid = await validateSelection(c, 'class');
                           if (!isValid) return;
                           setSelectedClass(c);
+                          setSelectedSessions([]);
                           if (c.activePromotions?.length > 0) setSelectedPromo(c.activePromotions[0]);
                           else setSelectedPromo(null);
                           setStep(4);
@@ -1724,7 +1767,7 @@ export default function WalkingBooking() {
                           <div
                             key={t._id}
                             className={`p-5 rounded-[24px] border-2 transition-all flex items-center gap-4 group cursor-pointer ${selectedTrainer === t._id ? 'border-brand-blue bg-white shadow-glow' : 'bg-white border-slate-50 hover:border-brand-blue/20'}`}
-                            onClick={() => { setSelectedTrainer(t._id); setStep(5); }}
+                            onClick={() => { setSelectedTrainer(t._id); setSelectedSessions([]); setStep(5); }}
                           >
                             <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-2xl overflow-hidden shrink-0 group-hover:scale-105 transition-all">
                               {t.avatarUrl ? <img src={getImageUrl(t.avatarUrl)} className="h-full w-full object-cover" /> : '🏆'}
@@ -2291,7 +2334,7 @@ export default function WalkingBooking() {
                           </label>
 
                           {isVendorSale && (
-                            <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                            <div className="mt-4 animate-in fade-in slide-in-from-top-2 space-y-3">
                               <select
                                 className="w-full bg-ink border border-white/20 rounded-2xl p-4 text-sm font-bold text-white outline-none focus:border-brand-blue"
                                 value={selectedVendorId}
@@ -2302,6 +2345,49 @@ export default function WalkingBooking() {
                                   <option key={v._id} value={v._id} className="text-white bg-ink">{v.name} {v.companyName ? `(${v.companyName})` : ''}</option>
                                 ))}
                               </select>
+                              <input
+                                type="text"
+                                className="w-full bg-ink border border-white/20 rounded-2xl p-4 text-sm font-bold text-white outline-none focus:border-brand-blue placeholder:text-white/30"
+                                placeholder="Vendor Booking No. / Ref"
+                                value={vendorReference}
+                                onChange={(e) => setVendorReference(e.target.value)}
+                              />
+                              <div className="relative">
+                                <input
+                                  type="file"
+                                  id="vendor-attachment"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files[0];
+                                    if (!file) return;
+                                    const formData = new FormData();
+                                    formData.append('image', file);
+                                    setUploadingAttachment(true);
+                                    try {
+                                      const res = await api.post('/upload', formData, {
+                                        headers: { 'Content-Type': 'multipart/form-data' }
+                                      });
+                                      setAttachment(res.data.image);
+                                      toast.success('Attachment uploaded successfully!');
+                                    } catch (err) {
+                                      toast.error('Failed to upload attachment.');
+                                    } finally {
+                                      setUploadingAttachment(false);
+                                    }
+                                  }}
+                                  disabled={uploadingAttachment}
+                                />
+                                <label
+                                  htmlFor="vendor-attachment"
+                                  className="flex items-center justify-between w-full bg-ink border border-dashed border-white/20 hover:border-brand-blue rounded-2xl p-4 text-sm font-bold text-white cursor-pointer transition-colors"
+                                >
+                                  <span className={attachment ? 'text-emerald-400 truncate max-w-[200px]' : 'text-white/30'}>
+                                    {uploadingAttachment ? 'Uploading...' : (attachment ? 'File Attached (Click to Change)' : 'Attach Invoice/File (Optional)')}
+                                  </span>
+                                  {!uploadingAttachment && <span className="text-brand-blue">📁</span>}
+                                  {uploadingAttachment && <div className="w-4 h-4 border-2 border-brand-blue border-t-transparent rounded-full animate-spin"></div>}
+                                </label>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -2317,11 +2403,10 @@ export default function WalkingBooking() {
                                   key={mode}
                                   onClick={() => {
                                     if (isSelected) {
-                                      if (paymentMethods.length > 1) {
-                                        setPaymentMethods(paymentMethods.filter(m => m !== mode));
-                                      }
+                                      setPaymentMethods(paymentMethods.filter(m => m !== mode));
                                     } else {
                                       setPaymentMethods([...paymentMethods, mode]);
+                                      if (mode === 'cash' && paymentMethods.length === 0) setIsDenominationModalOpen(true);
                                     }
                                   }}
                                   className={`w-full p-6 rounded-[32px] border-2 transition-all flex items-center justify-between group ${isSelected ? 'border-brand-blue bg-white/10' : 'border-white/5 bg-white/5 hover:border-white/20'}`}
@@ -2342,24 +2427,36 @@ export default function WalkingBooking() {
 
                           {paymentMethods.length === 1 && paymentMethods[0] === 'cash' && (
                         <div className="mb-10 p-5 bg-white/5 rounded-[32px] border border-white/10 animate-in fade-in slide-in-from-top-2">
-                          <label className="block text-xs font-black text-white/40 uppercase tracking-[0.2em] mb-3 px-1">Cash Received (AED)</label>
-                          <input
-                            type="number"
-                            className="w-full bg-ink border border-white/20 rounded-2xl py-4 px-5 text-xl font-black text-emerald-400 focus:ring-2 focus:ring-brand-blue outline-none placeholder:text-white/20"
-                            placeholder="e.g. 500"
-                            value={cashReceived}
-                            onChange={(e) => setCashReceived(e.target.value)}
-                          />
-                          {Number(cashReceived) > 0 && (
-                            <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center px-1">
-                              <span className="text-xs font-bold text-white/40 uppercase tracking-widest">Change Due:</span>
-                              <span className={`text-xl font-black ${(Number(cashReceived) - (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))) >= 0 ? 'text-brand-blue' : 'text-rose-500'}`}>
-                                {currency} {Math.max(0, Number(cashReceived) - (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))).toFixed(2)}
-                              </span>
+                          {Number(cashReceived) > 0 ? (
+                            <div 
+                              onClick={() => setIsDenominationModalOpen(true)}
+                              className="bg-white/5 border border-white/20 rounded-2xl p-4 cursor-pointer hover:bg-white/10 transition-colors"
+                            >
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold text-white/40 uppercase tracking-widest">Cash Received</span>
+                                <span className="text-lg font-black text-emerald-400">{currency} {Number(cashReceived).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-white/40 uppercase tracking-widest">Change Due</span>
+                                <span className={`text-lg font-black ${(Number(cashReceived) - (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))) >= 0 ? 'text-brand-blue' : 'text-rose-500'}`}>
+                                  {currency} {Math.max(0, Number(cashReceived) - (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax))).toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="mt-3 text-center">
+                                <span className="text-[10px] font-black text-brand-blue uppercase tracking-[0.2em]">Click to Edit Notes</span>
+                              </div>
                             </div>
+                          ) : (
+                            <button 
+                              onClick={() => setIsDenominationModalOpen(true)}
+                              className="w-full bg-white/5 border border-white/20 rounded-2xl p-4 text-sm font-bold text-white/60 hover:text-white hover:bg-white/10 transition-colors uppercase tracking-widest"
+                            >
+                              Enter Cash Details
+                            </button>
                           )}
+                          
                           {Number(cashReceived) > 0 && Number(cashReceived) < (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax)) && (
-                            <p className="mt-2 text-[10px] font-bold text-rose-500 flex justify-center">Insufficient cash received!</p>
+                            <p className="mt-4 text-[10px] font-bold text-rose-500 flex justify-center">Insufficient cash received!</p>
                           )}
                         </div>
                       )}
@@ -2377,7 +2474,29 @@ export default function WalkingBooking() {
                                 placeholder="0"
                                 value={splitAmounts.cash}
                                 onChange={(e) => setSplitAmounts({ ...splitAmounts, cash: e.target.value })}
+                                onBlur={(e) => {
+                                  if (Number(splitAmounts.cash) > 0) {
+                                    setIsDenominationModalOpen(true);
+                                  }
+                                }}
                               />
+                              
+                              {Number(cashReceived) > 0 && (
+                                <div className="mt-4 bg-white/5 border border-white/20 rounded-xl p-4 cursor-pointer hover:bg-white/10 transition-colors"
+                                     onClick={() => setIsDenominationModalOpen(true)}
+                                >
+                                  <div className="flex justify-between items-center mb-2">
+                                    <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Received</span>
+                                    <span className="text-sm font-black text-emerald-400">{currency} {Number(cashReceived).toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Change Due</span>
+                                    <span className={`text-sm font-black ${(Number(cashReceived) - Number(splitAmounts.cash)) >= 0 ? 'text-brand-blue' : 'text-rose-500'}`}>
+                                      {currency} {Math.max(0, Number(cashReceived) - Number(splitAmounts.cash)).toFixed(2)}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -2546,7 +2665,7 @@ export default function WalkingBooking() {
                           <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">✨</div>
                           <div>
                             <h4 className="font-display text-lg font-black text-ink">{selectedPlan?.name || selectedClass?.title}</h4>
-                            <p className="text-[10px] font-bold text-indigo-600/60 uppercase tracking-widest mt-1">{currency} {Math.round((activeTax?.calculationMethod === 'inclusive' ? (currentPrice - discountAmount - couponAmount) : (currentPrice - discountAmount - couponAmount + currentTax)) * 100) / 100} • {(paymentMethods.length > 1 ? 'split' : paymentMethods[0]).toUpperCase()}</p>
+                            <p className="text-[10px] font-bold text-indigo-600/60 uppercase tracking-widest mt-1">{currency} {Math.round((activeTax?.calculationMethod === 'inclusive' ? (currentPrice - discountAmount - couponAmount) : (currentPrice - discountAmount - couponAmount + currentTax)) * 100) / 100} • {isVendorSale ? 'VENDOR' : (paymentMethods.length > 1 ? 'split' : (paymentMethods[0] || 'Unknown')).toUpperCase()}</p>
                           </div>
                         </div>
                       </div>
@@ -2887,15 +3006,13 @@ export default function WalkingBooking() {
                   <div className={`font-black text-sm ${abortType === 'Cancel' ? 'text-rose-600' : 'text-ink/70'}`}>Cancel</div>
                   <div className="text-xs font-medium text-ink/50 mt-1">Customer backed out or couldn't pay halfway through.</div>
                 </button>
-                {(selectedClass || selectedPlan) && (
-                  <button
-                    onClick={() => setAbortType('Void')}
-                    className={`p-4 rounded-xl text-left border-2 transition-all ${abortType === 'Void' ? 'border-rose-500 bg-rose-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
-                  >
-                    <div className={`font-black text-sm ${abortType === 'Void' ? 'text-rose-600' : 'text-ink/70'}`}>Void</div>
-                    <div className="text-xs font-medium text-ink/50 mt-1">Staff made a mistake, selected wrong items, or system issue.</div>
-                  </button>
-                )}
+                <button
+                  onClick={() => setAbortType('Void')}
+                  className={`p-4 rounded-xl text-left border-2 transition-all ${abortType === 'Void' ? 'border-rose-500 bg-rose-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                >
+                  <div className={`font-black text-sm ${abortType === 'Void' ? 'text-rose-600' : 'text-ink/70'}`}>Void</div>
+                  <div className="text-xs font-medium text-ink/50 mt-1">Staff made a mistake, selected wrong items, or system issue.</div>
+                </button>
               </div>
 
               <div className="mb-6">
@@ -2920,6 +3037,19 @@ export default function WalkingBooking() {
       )}
 
       <Footer />
+      <BookingDenominationModal
+        isOpen={isDenominationModalOpen}
+        onClose={() => setIsDenominationModalOpen(false)}
+        initialReceived={receivedDenominations}
+        initialChange={changeDenominations}
+        amountToPay={paymentMethods.length === 1 ? (activeTax?.calculationMethod === 'inclusive' ? Math.max(0, currentPrice - discountAmount - couponAmount) : (Math.max(0, currentPrice - discountAmount - couponAmount) + currentTax)) : Number(splitAmounts.cash)}
+        onConfirm={(rcvd, chng) => {
+          setReceivedDenominations(rcvd);
+          setChangeDenominations(chng);
+          const totalRcvd = Object.entries(rcvd).reduce((sum, [v, c]) => sum + (Number(v) * (Number(c) || 0)), 0);
+          if (totalRcvd > 0) setCashReceived(totalRcvd.toString());
+        }}
+      />
     </div>
   );
 }

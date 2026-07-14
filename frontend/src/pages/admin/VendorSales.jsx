@@ -4,8 +4,7 @@ import Footer from '../../components/Footer.jsx';
 import AdminHeader from '../../components/AdminHeader.jsx';
 import api from '../../api/api.js';
 import { useSettings } from '../../context/SettingsContext.jsx';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 
 export default function VendorSales() {
@@ -46,46 +45,43 @@ export default function VendorSales() {
     if (selectedVendor) fetchReport();
   }, [selectedVendor, dateRange]);
 
-  const exportPDF = () => {
+  const exportExcel = () => {
     if (!reportData) return;
     const vendor = vendors.find(v => v._id === selectedVendor);
-    const doc = new jsPDF();
-    doc.setFontSize(20);
-    doc.text('Vendor Sales Report', 14, 22);
-    doc.setFontSize(12);
-    doc.text(`Vendor: ${vendor?.name} ${vendor?.companyName ? `(${vendor.companyName})` : ''}`, 14, 32);
-    doc.text(`Date Range: ${dateRange.startDate} to ${dateRange.endDate}`, 14, 40);
-
-    const tableColumn = ["Date", "Customer", "Plan", "Base Price", "Vendor Sale Price", "Vendor Margin", "Gym Net"];
-    const tableRows = [];
-
-    reportData.sales.forEach(sale => {
+    
+    const excelData = reportData.sales.map(sale => {
       const date = new Date(sale.createdAt).toLocaleDateString();
       const customer = sale.userId?.name || 'N/A';
-      const plan = sale.planId?.name || 'Package';
-      const basePrice = `${currency}${sale.amount || 0}`;
-      const salePrice = `${currency}${sale.vendorSalePrice || 0}`;
-      const margin = `${currency}${sale.vendorMargin || 0}`;
-      const net = `${currency}${sale.gymRevenue || 0}`;
-      tableRows.push([date, customer, plan, basePrice, salePrice, margin, net]);
+      const itemName = sale.planId?.name || sale.bookingId?.planId?.name || sale.bookingId?.classId?.title || 'Custom Package';
+      const itemPrice = sale.planId?.price || sale.bookingId?.planId?.price || sale.bookingId?.classId?.price || sale.amount || 0;
+      
+      return {
+        "Date": date,
+        "Customer": customer,
+        "Base Package": itemName,
+        "Base Price": itemPrice,
+        "Vendor Sale Price": sale.vendorSalePrice || 0,
+        "Vendor Margin": sale.vendorMargin || 0,
+        "Gym Net": sale.gymRevenue || 0
+      };
     });
 
-    tableRows.push([
-      'TOTALS', '', '', '',
-      `${currency}${reportData.summary.totalSalePrice}`,
-      `${currency}${reportData.summary.totalMargin}`,
-      `${currency}${reportData.summary.totalGymRevenue}`
-    ]);
-
-    doc.autoTable({
-      startY: 50,
-      head: [tableColumn],
-      body: tableRows,
-      theme: 'grid',
-      headStyles: { fillColor: [52, 152, 219] }
+    excelData.push({
+      "Date": "TOTALS",
+      "Customer": "",
+      "Base Package": "",
+      "Base Price": "",
+      "Vendor Sale Price": reportData.summary.totalSalePrice,
+      "Vendor Margin": reportData.summary.totalMargin,
+      "Gym Net": reportData.summary.totalGymRevenue
     });
 
-    doc.save(`vendor_sales_${vendor?.name}_${dateRange.startDate}.pdf`);
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Vendor Sales");
+    
+    const safeVendorName = (vendor?.name || 'Vendor').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    XLSX.writeFile(workbook, `vendor_sales_${safeVendorName}_${dateRange.startDate}.xlsx`);
   };
 
   return (
@@ -129,11 +125,11 @@ export default function VendorSales() {
             />
           </div>
           <button 
-            onClick={exportPDF}
+            onClick={exportExcel}
             disabled={!reportData?.sales?.length}
             className="bg-brand-blue text-white px-8 py-4 rounded-2xl font-bold shadow-lg hover:-translate-y-1 transition-transform disabled:opacity-50 disabled:hover:translate-y-0"
           >
-            Export PDF
+            Export Excel
           </button>
         </div>
 
@@ -164,6 +160,7 @@ export default function VendorSales() {
                       <th className="px-6 py-5 font-bold tracking-wider">Date</th>
                       <th className="px-6 py-5 font-bold tracking-wider">Customer</th>
                       <th className="px-6 py-5 font-bold tracking-wider">Base Package</th>
+                      <th className="px-6 py-5 font-bold tracking-wider text-right">Base Price</th>
                       <th className="px-6 py-5 font-bold tracking-wider text-right">Vendor Sale Price</th>
                       <th className="px-6 py-5 font-bold tracking-wider text-right text-orange-500">Margin</th>
                       <th className="px-6 py-5 font-bold tracking-wider text-right text-green-500">Gym Net</th>
@@ -179,8 +176,10 @@ export default function VendorSales() {
                           {sale.userId?.name || 'N/A'}
                         </td>
                         <td className="px-6 py-4 text-ink/70">
-                          {sale.planId?.name || 'Custom Package'} <br/>
-                          <span className="text-[10px] uppercase text-ink/40">Base: {currency}{sale.amount}</span>
+                          {sale.planId?.name || sale.bookingId?.planId?.name || sale.bookingId?.classId?.title || 'Custom Package'}
+                        </td>
+                        <td className="px-6 py-4 text-right font-display text-lg text-ink/70">
+                          {currency}{sale.planId?.price || sale.bookingId?.planId?.price || sale.bookingId?.classId?.price || sale.amount || 0}
                         </td>
                         <td className="px-6 py-4 text-right font-display text-lg text-ink">
                           {currency}{sale.vendorSalePrice || 0}
@@ -195,7 +194,7 @@ export default function VendorSales() {
                     ))}
                     {reportData.sales.length === 0 && (
                       <tr>
-                        <td colSpan="6" className="px-6 py-12 text-center text-ink/40 italic">
+                        <td colSpan="7" className="px-6 py-12 text-center text-ink/40 italic">
                           No sales recorded for this vendor in the selected period.
                         </td>
                       </tr>

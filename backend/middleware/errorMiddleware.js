@@ -5,8 +5,16 @@ export function notFound(req, res, next) {
 }
 
 export function errorHandler(err, req, res, next) {
-  console.error('[SERVER ERROR]', err);
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  
+  // Only log as a SERVER ERROR if it's an actual server error (500+), not a 404 Not Found
+  if (statusCode >= 500) {
+    console.error('[SERVER ERROR]', err);
+  } else {
+    // Optionally log as warning or ignore 404s to keep logs clean
+    // console.warn(`[WARNING] ${statusCode}: ${err.message}`);
+  }
+
   res.status(statusCode);
   res.json({
     message: err.message,

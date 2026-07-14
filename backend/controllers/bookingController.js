@@ -2,6 +2,7 @@ import asyncHandler from 'express-async-handler';
 import { notifyAdmins } from '../utils/socketUtils.js';
 import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
+import Shift from '../models/Shift.js';
 import Session from '../models/Session.js';
 import ClassModel from '../models/Class.js';
 import SalesOrder from '../models/SalesOrder.js';
@@ -220,7 +221,7 @@ export const getAllBookings = asyncHandler(async (req, res) => {
 });
 
 export const createBooking = asyncHandler(async (req, res) => {
-  const { participants, classId, date, sessionId, paymentMethod, paymentStatus, guestDetails, userId, promotionId } = req.body;
+  const { participants, classId, date, sessionId, paymentMethod, paymentStatus, guestDetails, userId, promotionId, receivedDenominations, changeDenominations } = req.body;
 
   if (!req.user && (!guestDetails || !guestDetails.name || !guestDetails.email)) {
     res.status(400);
@@ -494,6 +495,39 @@ export const createBooking = asyncHandler(async (req, res) => {
     processedBy: req.user?._id,
     currency
   });
+
+  // DENOMINATIONS TRACKING LOGIC
+  if ((receivedDenominations || changeDenominations) && req.user) {
+    const shift = await Shift.findOne({ cashierId: req.user._id, status: 'open' });
+    if (shift && shift.currentDenominations) {
+      const prevDenoms = { ...shift.currentDenominations };
+      const currentDenoms = { ...shift.currentDenominations };
+      
+      if (receivedDenominations) {
+        Object.entries(receivedDenominations).forEach(([val, count]) => {
+          if (count) {
+            currentDenoms[val] = (Number(currentDenoms[val]) || 0) + Number(count);
+          }
+        });
+      }
+      if (changeDenominations) {
+        Object.entries(changeDenominations).forEach(([val, count]) => {
+          if (count) {
+            currentDenoms[val] = (Number(currentDenoms[val]) || 0) - Number(count);
+          }
+        });
+      }
+
+      shift.currentDenominations = currentDenoms;
+      shift.denominationExchanges.push({
+        timestamp: new Date(),
+        previousDenominations: prevDenoms,
+        newDenominations: currentDenoms,
+        reason: `Walk-in Booking Payment (Booking: ${created.bookingNumber})`
+      });
+      await shift.save();
+    }
+  }
 
   if (session) {
     session.bookedParticipants += participants.length;
@@ -853,7 +887,7 @@ export const linkUserBookings = async (user) => {
 };
 
 export const createGroupBooking = asyncHandler(async (req, res) => {
-  const { participants, sessionIds, sessions, classId: providedClassId, locationId: providedLocationId, corporateName, paymentMethod, promotionId, discountAmount, guestDetails } = req.body;
+  const { participants, sessionIds, sessions, classId: providedClassId, locationId: providedLocationId, corporateName, paymentMethod, promotionId, discountAmount, guestDetails, vendorReference, attachment } = req.body;
   let couponCode = req.body.couponCode;
   let couponAmount = req.body.couponAmount || 0;
   
@@ -949,11 +983,13 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
         status: (paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'confirmed' : 'pending',
         paymentStatus: (paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'completed' : 'pending',
         paymentMethod: paymentMethod || 'center',
+        paymentReference: vendorReference || undefined,
         splitDetails: req.body.splitDetails || [],
         promotionId,
         discountAmount: dDisc,
         couponCode,
         couponAmount: dCoup,
+        attachment: attachment || undefined,
         processedBy: isStaff ? req.user._id : undefined,
         processedByRole: isStaff ? req.user.role : undefined
       });
@@ -1013,7 +1049,18 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     }
     
     const invoiceDesc = `${classItem.title} - Group Booking${req.body.isVendorSale ? ` (via ${vendorName || 'Vendor'})` : ''}`;
-    const invoiceItems = [{ description: invoiceDesc, quantity: count, unitPrice: basePricePerItem, total: rawBaseAmount }];
+    const invoiceItems = [];
+    
+    if (req.body.isVendorSale && req.body.vendorSalePrice !== undefined) {
+      const trueBase = (classItem.price || 0) * count;
+      const vendorDiscount = trueBase - Number(req.body.vendorSalePrice);
+      invoiceItems.push({ description: invoiceDesc, quantity: count, unitPrice: (classItem.price || 0), total: trueBase });
+      if (vendorDiscount > 0) {
+        invoiceItems.push({ description: `Vendor Discount`, quantity: 1, unitPrice: -vendorDiscount, total: -vendorDiscount });
+      }
+    } else {
+      invoiceItems.push({ description: invoiceDesc, quantity: count, unitPrice: basePricePerItem, total: rawBaseAmount });
+    }
     if (discountAmount > 0) invoiceItems.push({ description: 'Promotion Discount', quantity: 1, unitPrice: -discountAmount, total: -discountAmount });
     
     if (couponAmount > 0) {
@@ -1032,7 +1079,7 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
       userId: req.user && req.body.userId ? req.body.userId : (req.user ? req.user._id : undefined),
       guestDetails: !req.user ? guestDetails : undefined,
       amount: totalAmount,
-      grossAmount: rawBaseAmount,
+      grossAmount: (req.body.isVendorSale && req.body.vendorSalePrice !== undefined) ? ((classItem.price || 0) * count) : rawBaseAmount,
       totalAmount: totalAmount,
       status: (paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'paid' : 'unpaid',
       locationId,
@@ -1058,6 +1105,7 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     status: (totalAmount === 0 || paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'paid' : 'pending', 
     locationId,
     paymentMethod,
+    reference: vendorReference || undefined,
     splitDetails: req.body.splitDetails || [],
     discountAmount: discountAmount || 0,
     couponCode,
@@ -1069,6 +1117,40 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     vendorMargin: req.body.isVendorSale ? Number(req.body.vendorMargin) : undefined,
     gymRevenue
   });
+  
+  // DENOMINATIONS TRACKING LOGIC
+  const { receivedDenominations, changeDenominations } = req.body;
+  if ((receivedDenominations || changeDenominations) && req.user) {
+    const shift = await Shift.findOne({ cashierId: req.user._id, status: 'open' });
+    if (shift && shift.currentDenominations) {
+      const prevDenoms = { ...shift.currentDenominations };
+      const currentDenoms = { ...shift.currentDenominations };
+      
+      if (receivedDenominations) {
+        Object.entries(receivedDenominations).forEach(([val, count]) => {
+          if (count) {
+            currentDenoms[val] = (Number(currentDenoms[val]) || 0) + Number(count);
+          }
+        });
+      }
+      if (changeDenominations) {
+        Object.entries(changeDenominations).forEach(([val, count]) => {
+          if (count) {
+            currentDenoms[val] = (Number(currentDenoms[val]) || 0) - Number(count);
+          }
+        });
+      }
+
+      shift.currentDenominations = currentDenoms;
+      shift.denominationExchanges.push({
+        timestamp: new Date(),
+        previousDenominations: prevDenoms,
+        newDenominations: currentDenoms,
+        reason: `Walk-in Group Booking Payment (Group: ${groupBookingId})`
+      });
+      await shift.save();
+    }
+  }
   
   // Return the bookings array along with group info
   res.status(201).json({ groupBookingId, bookingCount: bookings.length, totalAmount, bookings });

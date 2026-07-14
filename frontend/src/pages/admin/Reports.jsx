@@ -24,6 +24,7 @@ const REPORT_TYPES = [
   { id: 'detailed_sales', label: 'Detailed Sales Report (Itemized)' },
   { id: 'profit_loss', label: 'Profit & Loss Report' },
   { id: 'expenses', label: 'Expenses Report' },
+  { id: 'vendor_sales', label: 'Vendor Sales Report' },
 ];
 
 export default function Reports() {
@@ -83,13 +84,20 @@ export default function Reports() {
             }
           }
 
+          let basePrice = item.planId?.price || item.classId?.price || item.totalAmount || 0;
+          let implicitVendorDiscount = 0;
+          if (mode === 'VENDOR' && basePrice > item.totalAmount) {
+            implicitVendorDiscount = basePrice - item.totalAmount;
+          }
+
           return {
             ...item,
             paymentSource: source,
             paymentMode: mode,
             paymentType: mode,
             capacity: item.classId?.capacity || 'N/A',
-            combinedDiscount: (Number(item.discountAmount) || 0) + (Number(item.couponAmount) || 0),
+            basePrice: basePrice,
+            combinedDiscount: (Number(item.discountAmount) || 0) + (Number(item.couponAmount) || 0) + implicitVendorDiscount,
             slotTiming: item.sessionId ? (
               `${new Date(item.sessionId.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} - ${item.sessionId.endTime ? new Date(item.sessionId.endTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'TBA'}`
             ) : 'N/A'
@@ -257,6 +265,7 @@ export default function Reports() {
       { key: 'sessionId', label: 'Trainer' },
       { key: 'slotTiming', label: 'Slot Timing' },
       { key: 'date', label: 'Date' },
+      { key: 'basePrice', label: 'Base Price' },
       { key: 'totalAmount', label: 'Amount' },
       { key: 'status', label: 'Status' },
       { key: 'paymentSource', label: 'Payment Source' },
@@ -446,6 +455,17 @@ export default function Reports() {
       { key: 'source', label: 'Source' },
       { key: 'amount', label: 'Amount (AED)' },
       { key: 'location', label: 'Branch' },
+    ],
+    vendor_sales: [
+      { key: 'date', label: 'Date' },
+      { key: 'customerName', label: 'Customer' },
+      { key: 'vendorName', label: 'Vendor' },
+      { key: 'basePackage', label: 'Base Package' },
+      { key: 'basePrice', label: 'Base Price (AED)' },
+      { key: 'vendorSalePrice', label: 'Vendor Sale Price (AED)' },
+      { key: 'vendorMargin', label: 'Vendor Margin (AED)' },
+      { key: 'gymNet', label: 'Gym Net (AED)' },
+      { key: 'branchName', label: 'Branch' }
     ]
   };
 
@@ -529,7 +549,7 @@ export default function Reports() {
       );
     }
 
-    if (key === 'amount' || key === 'totalRevenue' || key === 'baseAmount' || key === 'taxCollected' || key === 'totalPaid' || key === 'unitPrice' || key === 'lineTotal' || key === 'lineVat' || key === 'discount') {
+    if (key === 'amount' || key === 'totalAmount' || key === 'totalRevenue' || key === 'baseAmount' || key === 'taxCollected' || key === 'totalPaid' || key === 'unitPrice' || key === 'lineTotal' || key === 'lineVat' || key === 'discount' || key === 'combinedDiscount' || key === 'basePrice' || key === 'vendorSalePrice' || key === 'vendorMargin' || key === 'gymNet') {
       return <span className="font-black text-brand-blue">AED {Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
     }
 

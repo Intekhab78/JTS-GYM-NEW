@@ -510,6 +510,52 @@ export const getDetailedReport = asyncHandler(async (req, res) => {
       break;
     }
 
+    case 'vendor_sales': {
+      const vsFilter = { isVendorSale: true, status: 'paid', ...filter };
+      if (sDate && eDate) {
+        vsFilter.createdAt = { $gte: sDate, $lte: eDate };
+      } else if (sDate) {
+        vsFilter.createdAt = { $gte: sDate };
+      } else if (eDate) {
+        vsFilter.createdAt = { $lte: eDate };
+      }
+      
+      const sales = await Payment.find(vsFilter)
+        .populate('userId', 'name email phone')
+        .populate('vendorId', 'name companyName')
+        .populate('planId', 'name price')
+        .populate({
+          path: 'bookingId',
+          select: 'classId planId',
+          populate: [
+            { path: 'classId', select: 'title price' },
+            { path: 'planId', select: 'name price' }
+          ]
+        })
+        .populate('locationId', 'name')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      data = sales.map(sale => {
+        const itemName = sale.planId?.name || sale.bookingId?.planId?.name || sale.bookingId?.classId?.title || 'Custom Package';
+        const itemPrice = sale.planId?.price || sale.bookingId?.planId?.price || sale.bookingId?.classId?.price || sale.amount || 0;
+        
+        return {
+          ...sale,
+          date: sale.createdAt,
+          customerName: sale.userId?.name || 'Guest',
+          vendorName: sale.vendorId?.name ? `${sale.vendorId.name} ${sale.vendorId.companyName ? `(${sale.vendorId.companyName})` : ''}` : 'Unknown',
+          basePackage: itemName,
+          basePrice: itemPrice,
+          vendorSalePrice: sale.vendorSalePrice || 0,
+          vendorMargin: sale.vendorMargin || 0,
+          gymNet: sale.gymRevenue || 0,
+          branchName: sale.locationId?.name || 'N/A'
+        };
+      });
+      break;
+    }
+
     case 'sales_report': {
       const payments = await Payment.find({ ...filter, ...dateFilter, status: 'paid' }).sort({ createdAt: -1 });
       const dailyMap = {};
@@ -579,8 +625,17 @@ export const getDetailedReport = asyncHandler(async (req, res) => {
         const bookingNumber = inv.bookingId?.bookingNumber || 'N/A';
 
         const safeItems = Array.isArray(inv.items) ? inv.items : [];
+        
+        let vendorDiscount = 0;
+        safeItems.forEach(item => {
+          if (item.unitPrice < 0 && item.description === 'Vendor Discount') {
+            vendorDiscount += Math.abs(item.total);
+          }
+        });
 
         safeItems.forEach(item => {
+          if (item.unitPrice < 0) return; // Skip negative items, they are discounts
+
           lineItems.push({
             location,
             invoiceNumber: inv.invoiceNumber || 'N/A',
@@ -594,8 +649,8 @@ export const getDetailedReport = asyncHandler(async (req, res) => {
             quantity: item.quantity || 1,
             lineTotal: item.total || 0,
             lineVat: item.taxAmount || 0,
-            discount: (inv.discountAmount || 0) + (inv.couponAmount || 0),
-            discountType: inv.couponCode ? `Coupon (${inv.couponCode})` : ((inv.discountAmount || 0) > 0 ? 'Promo' : 'None'),
+            discount: (inv.discountAmount || 0) + (inv.couponAmount || 0) + vendorDiscount,
+            discountType: vendorDiscount > 0 ? 'Vendor' : (inv.couponCode ? `Coupon (${inv.couponCode})` : ((inv.discountAmount || 0) > 0 ? 'Promo' : 'None')),
             totalAmount: inv.totalAmount || 0,
             paymentSource,
             paymentMode

@@ -24,5 +24,10 @@ export const shiftApi = {
   getAllShifts: async () => {
     const response = await api.get('/shifts');
     return response.data;
+  },
+
+  exchangeDenominations: async (data) => {
+    const response = await api.put('/shifts/current/denominations', data);
+    return response.data;
   }
 };
