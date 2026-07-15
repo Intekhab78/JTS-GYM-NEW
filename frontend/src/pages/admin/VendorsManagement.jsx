@@ -5,6 +5,7 @@ import AdminHeader from '../../components/AdminHeader.jsx';
 import api from '../../api/api.js';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../../hooks/usePermissions.js';
+import * as XLSX from 'xlsx';
 
 const emptyForm = {
   name: '',
@@ -112,6 +113,45 @@ export default function VendorsManagement() {
     } finally {
       setLoadingPrices(false);
     }
+  };
+
+  const handleExportExcel = () => {
+    if (!selectedVendorForPrices) return;
+    
+    const aoa = [
+      [`Prices for ${selectedVendorForPrices.name}`],
+      [],
+      ['Type', 'Item Name', 'Regular Price (AED)', 'Vendor Price (AED)', 'Valid From', 'Valid To']
+    ];
+
+    vendorPricesData.classes.forEach(c => {
+      const vp = c.vendorPrices?.find(v => v.vendorId?._id === selectedVendorForPrices._id || v.vendorId === selectedVendorForPrices._id) || {};
+      aoa.push([
+        'Class',
+        c.title,
+        c.price,
+        vp.price,
+        vp.startDate ? new Date(vp.startDate).toLocaleDateString() : 'Always',
+        vp.endDate ? new Date(vp.endDate).toLocaleDateString() : 'Always'
+      ]);
+    });
+
+    vendorPricesData.plans.forEach(p => {
+      const vp = p.vendorPrices?.find(v => v.vendorId?._id === selectedVendorForPrices._id || v.vendorId === selectedVendorForPrices._id) || {};
+      aoa.push([
+        'Membership/Plan',
+        p.name,
+        p.price,
+        vp.price,
+        vp.startDate ? new Date(vp.startDate).toLocaleDateString() : 'Always',
+        vp.endDate ? new Date(vp.endDate).toLocaleDateString() : 'Always'
+      ]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    XLSX.utils.book_append_sheet(wb, ws, "Vendor_Prices");
+    XLSX.writeFile(wb, `${selectedVendorForPrices.name.replace(/\s+/g, '_')}_Prices.xlsx`);
   };
 
   return (
@@ -325,7 +365,16 @@ export default function VendorsManagement() {
                 )}
               </div>
               
-              <div className="p-6 border-t border-slate-100 bg-white flex justify-end">
+              <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-4">
+                <button 
+                  onClick={handleExportExcel} 
+                  className="px-6 py-3 bg-brand-blue/10 text-brand-blue rounded-xl font-bold hover:bg-brand-blue/20 transition-all flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  Download in Excel
+                </button>
                 <button onClick={() => setIsPricesModalOpen(false)} className="bg-slate-100 text-ink px-8 py-3 rounded-xl font-bold hover:bg-slate-200 transition-colors">Close</button>
               </div>
             </div>

@@ -507,6 +507,28 @@ export default function SystemSettings() {
                   </span>
                 </div>
               </div>
+
+              <div className="p-6 rounded-3xl bg-slate-50/50 border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <h4 className="font-bold text-ink mb-1">Enable Cash Denomination Check</h4>
+                  <p className="text-xs text-ink/50 leading-relaxed max-w-sm">
+                    If enabled, cashiers must enter exact denominations when closing the shift and accepting cash. If disabled, they can simply enter the total cash amount.
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleToggleGlobal('enable_denomination_check', globalSettings.enable_denomination_check !== false)}
+                    disabled={isSaving}
+                    className={`w-14 h-8 rounded-full transition-all relative ${globalSettings.enable_denomination_check !== false ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-1 w-6 h-6 rounded-full bg-white transition-all ${globalSettings.enable_denomination_check !== false ? 'left-7' : 'left-1'}`} />
+                  </button>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-ink/40">
+                    {globalSettings.enable_denomination_check !== false ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+              </div>
             </div>
           </section>
         </div>

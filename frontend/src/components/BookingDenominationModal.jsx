@@ -3,9 +3,12 @@ import DenominationInput from './DenominationInput.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 
 export default function BookingDenominationModal({ isOpen, onClose, onConfirm, initialReceived, initialChange, amountToPay }) {
-  const { currency } = useSettings();
+  const { currency, globalSettings } = useSettings();
   const [receivedDenominations, setReceivedDenominations] = useState({});
   const [changeDenominations, setChangeDenominations] = useState({});
+
+  const enableDenominations = globalSettings?.enable_denomination_check !== false;
+  const [simpleCashReceived, setSimpleCashReceived] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -14,15 +17,31 @@ export default function BookingDenominationModal({ isOpen, onClose, onConfirm, i
     }
   }, [isOpen, initialReceived, initialChange]);
 
+  useEffect(() => {
+    if (isOpen && !enableDenominations && initialReceived) {
+      const total = Object.entries(initialReceived).reduce((sum, [val, count]) => sum + (Number(val) * (Number(count) || 0)), 0);
+      setSimpleCashReceived(total || '');
+    }
+  }, [isOpen, enableDenominations, initialReceived]);
+
   if (!isOpen) return null;
 
   const receivedTotal = Object.entries(receivedDenominations).reduce((sum, [val, count]) => sum + (Number(val) * (Number(count) || 0)), 0);
-  const changeDueAmount = Math.max(0, receivedTotal - amountToPay);
 
   const handleConfirm = () => {
-    onConfirm(receivedDenominations, changeDenominations);
+    if (globalSettings?.enable_denomination_check === false) {
+      onConfirm({ "1": simpleCashReceived }, {});
+    } else {
+      onConfirm(receivedDenominations, changeDenominations);
+    }
     onClose();
   };
+
+
+
+  const changeDueAmount = enableDenominations 
+    ? Math.max(0, receivedTotal - amountToPay)
+    : Math.max(0, Number(simpleCashReceived) - amountToPay);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4">
@@ -38,28 +57,59 @@ export default function BookingDenominationModal({ isOpen, onClose, onConfirm, i
             <span className="text-lg font-black text-brand-blue">{currency} {amountToPay.toFixed(2)}</span>
           </div>
 
-          <div>
-            <h3 className="text-sm font-black uppercase text-ink mb-2 tracking-widest">Received from Customer</h3>
-            <DenominationInput 
-              denominations={receivedDenominations} 
-              onChange={setReceivedDenominations}
-              type="receive"
-            />
-          </div>
-
-          {changeDueAmount > 0 && (
-            <div>
-              <div className="flex justify-between mb-2 mt-4 pt-4 border-t-2 border-slate-100">
-                <h3 className="text-sm font-black uppercase text-ink tracking-widest">Change Given Back</h3>
-                <span className="text-sm font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-md">
-                  Target: {currency} {changeDueAmount.toFixed(2)}
-                </span>
+          {enableDenominations ? (
+            <>
+              <div>
+                <h3 className="text-sm font-black uppercase text-ink mb-2 tracking-widest">Received from Customer</h3>
+                <DenominationInput 
+                  denominations={receivedDenominations} 
+                  onChange={setReceivedDenominations}
+                  type="receive"
+                />
               </div>
-              <DenominationInput 
-                denominations={changeDenominations} 
-                onChange={setChangeDenominations}
-                type="change"
-              />
+
+              {changeDueAmount > 0 && (
+                <div>
+                  <div className="flex justify-between mb-2 mt-4 pt-4 border-t-2 border-slate-100">
+                    <h3 className="text-sm font-black uppercase text-ink tracking-widest">Change Given Back</h3>
+                    <span className="text-sm font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-md">
+                      Target: {currency} {changeDueAmount.toFixed(2)}
+                    </span>
+                  </div>
+                  <DenominationInput 
+                    denominations={changeDenominations} 
+                    onChange={setChangeDenominations}
+                    type="change"
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-sm font-black uppercase text-ink mb-2 tracking-widest">Total Cash Received</h3>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink/40 font-black">{currency}</span>
+                  <input
+                    type="number"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-4 pl-14 pr-4 text-2xl font-black text-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all"
+                    placeholder="0.00"
+                    value={simpleCashReceived}
+                    onChange={(e) => setSimpleCashReceived(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {changeDueAmount > 0 && (
+                <div>
+                  <div className="flex justify-between mb-2 mt-4 pt-4 border-t-2 border-slate-100">
+                    <h3 className="text-sm font-black uppercase text-ink tracking-widest">Change Due</h3>
+                  </div>
+                  <div className="bg-rose-50 border border-rose-100 rounded-xl py-4 px-4">
+                    <span className="text-2xl font-black text-rose-500">{currency} {changeDueAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
