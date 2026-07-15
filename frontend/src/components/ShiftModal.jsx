@@ -19,12 +19,13 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
   const [expectedTotals, setExpectedTotals] = useState(null);
   const [loadingTotals, setLoadingTotals] = useState(false);
 
-  // Calculate total cash from denominations
-  const totalCash = Object.entries(denominations).reduce((sum, [value, count]) => {
-    return sum + (Number(value) * (Number(count) || 0));
-  }, 0);
+  const enableDenominations = globalSettings?.enable_denomination_check !== false;
+  const [simpleTotalCash, setSimpleTotalCash] = useState('');
 
-  const hasDenominationMismatch = expectedTotals?.currentDenominations && denominationsList.some(val => {
+  // Calculate total cash from denominations
+  const totalCash = Object.entries(denominations).reduce((sum, [value, count]) => sum + (Number(value) * (Number(count) || 0)), 0);
+
+  const hasDenominationMismatch = enableDenominations && expectedTotals?.currentDenominations && denominationsList.some(val => {
     const expected = Number(expectedTotals.currentDenominations[val]) || 0;
     const actual = Number(denominations[val]) || 0;
     return expected !== actual;
@@ -175,7 +176,7 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
 
                   {denominationsList.map((value) => {
                     const expectedCount = currentShift && expectedTotals?.currentDenominations ? (Number(expectedTotals.currentDenominations[value]) || 0) : null;
-                    const isMismatch = expectedCount !== null && expectedCount !== (Number(denominations[value]) || 0);
+                    const isMismatch = enableDenominations && expectedCount !== null && expectedCount !== (Number(denominations[value]) || 0);
 
                     return (
                       <div key={value} className="grid grid-cols-3 gap-2 items-start pt-1">
@@ -189,13 +190,13 @@ export default function ShiftModal({ isOpen, onClose, currentShift, isExpired, o
                             pattern="[0-9]*"
                             value={denominations[value]}
                             onChange={(e) => handleDenominationChange(value, e.target.value.replace(/\D/g, ''))}
-                            className={`w-full rounded-xl border-2 bg-white py-2 px-1 text-center text-sm font-bold text-ink outline-none transition-colors ${!blindClosing && expectedCount !== null
+                            className={`w-full rounded-xl border-2 bg-white py-2 px-1 text-center text-sm font-bold text-ink outline-none transition-colors ${!blindClosing && expectedCount !== null && enableDenominations
                                 ? (isMismatch ? 'border-amber-300 focus:border-amber-500 bg-amber-50/50' : 'border-emerald-300 focus:border-emerald-500 bg-emerald-50/50')
                                 : 'border-slate-200 focus:border-brand-blue'
                               }`}
                             placeholder="0"
                           />
-                          {!blindClosing && expectedCount !== null && (
+                          {!blindClosing && expectedCount !== null && enableDenominations && (
                             <span className={`text-[9px] font-black uppercase tracking-widest mt-1 ${isMismatch ? 'text-amber-500' : 'text-emerald-500'}`}>
                               Exp: {expectedCount}
                             </span>

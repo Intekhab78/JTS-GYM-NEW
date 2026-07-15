@@ -587,7 +587,14 @@ export const getDetailedReport = asyncHandler(async (req, res) => {
       const invoices = await Invoice.find({ ...filter, ...dateFilter, status: 'paid' })
         .populate('userId', 'name email phone')
         .populate('locationId', 'name')
-        .populate('bookingId', 'paymentMethod bookingNumber splitDetails')
+        .populate({
+          path: 'bookingId',
+          select: 'paymentMethod bookingNumber splitDetails isVendorSale classId planId',
+          populate: [
+            { path: 'classId', select: 'title price' },
+            { path: 'planId', select: 'name price' }
+          ]
+        })
         .sort({ date: -1 })
         .lean();
 
@@ -636,6 +643,18 @@ export const getDetailedReport = asyncHandler(async (req, res) => {
         safeItems.forEach(item => {
           if (item.unitPrice < 0) return; // Skip negative items, they are discounts
 
+          let finalUnitPrice = item.unitPrice || 0;
+          let calculatedVendorDiscount = vendorDiscount;
+
+          // Backward compatibility for old vendor bookings where the vendor price was incorrectly saved as the base price
+          if (inv.bookingId?.paymentMethod === 'vendor' && vendorDiscount === 0) {
+            const realBasePrice = inv.bookingId?.classId?.price || inv.bookingId?.planId?.price;
+            if (realBasePrice && realBasePrice > item.unitPrice) {
+               calculatedVendorDiscount = realBasePrice - item.unitPrice;
+               finalUnitPrice = realBasePrice;
+            }
+          }
+
           lineItems.push({
             location,
             invoiceNumber: inv.invoiceNumber || 'N/A',
@@ -645,12 +664,12 @@ export const getDetailedReport = asyncHandler(async (req, res) => {
             customerPhone,
             customerEmail,
             item: item.description || 'Service',
-            unitPrice: item.unitPrice || 0,
+            unitPrice: finalUnitPrice,
             quantity: item.quantity || 1,
             lineTotal: item.total || 0,
             lineVat: item.taxAmount || 0,
-            discount: (inv.discountAmount || 0) + (inv.couponAmount || 0) + vendorDiscount,
-            discountType: vendorDiscount > 0 ? 'Vendor' : (inv.couponCode ? `Coupon (${inv.couponCode})` : ((inv.discountAmount || 0) > 0 ? 'Promo' : 'None')),
+            discount: (inv.discountAmount || 0) + (inv.couponAmount || 0) + calculatedVendorDiscount,
+            discountType: calculatedVendorDiscount > 0 ? 'Vendor' : (inv.couponCode ? `Coupon (${inv.couponCode})` : ((inv.discountAmount || 0) > 0 ? 'Promo' : 'None')),
             totalAmount: inv.totalAmount || 0,
             paymentSource,
             paymentMode
