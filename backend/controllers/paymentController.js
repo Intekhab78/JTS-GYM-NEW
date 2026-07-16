@@ -47,6 +47,10 @@ const syncPayments = async (user = null, req = {}) => {
     }));
 
     for (const b of missingBookings) {
+      if (b.totalAmount === undefined || b.totalAmount === null) {
+        // Skip healing for corrupt or incomplete bookings without a totalAmount
+        continue;
+      }
       // Heal Payment records
       let exists = await Payment.findOne(withUAT(req, { 
         $or: [
