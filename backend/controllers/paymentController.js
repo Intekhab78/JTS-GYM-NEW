@@ -11,6 +11,8 @@ import { resolveReadLocationIds } from '../utils/locationScope.js';
 import { sendPaymentConfirmationEmail } from '../utils/mailer.js';
 import { linkUserBookings } from './bookingController.js';
 import { withUAT } from '../middleware/uatMiddleware.js';
+import { verifySignature } from './razorpayController.js';
+
 
 // Internal function to heal missing Payment records for any confirmed bookings
 const syncPayments = async (user = null, req = {}) => {
@@ -257,6 +259,21 @@ export const createPayment = asyncHandler(async (req, res) => {
     throw new Error('Amount is required');
   }
 
+  if (paymentMethod === 'online' && amount > 0) {
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      res.status(400);
+      throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
+    }
+    
+    const isValid = verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    if (!isValid) {
+      res.status(400);
+      throw new Error('Payment signature verification failed. Transaction was not verified.');
+    }
+  }
+
+
   const isStaff = req.user && !['parent', 'customer'].includes((req.user.role || '').toLowerCase());
   const targetUserId = (isStaff && userId) ? userId : req.user._id;
 
@@ -287,7 +304,7 @@ export const createPayment = asyncHandler(async (req, res) => {
     tenderedAmount: req.body.tenderedAmount || 0,
     changeAmount: req.body.changeAmount || 0,
     status: amount === 0 ? 'paid' : (req.body.status || (paymentMethod === 'center' ? 'pending' : 'paid')),
-    reference,
+    reference: reference || req.body.razorpay_payment_id || undefined,
     last4,
     locationId,
     promotionId,
@@ -317,6 +334,20 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
   if (!bookingId) {
     res.status(400);
     throw new Error('bookingId is required');
+  }
+
+  if (paymentMethod === 'online') {
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      res.status(400);
+      throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
+    }
+    
+    const isValid = verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    if (!isValid) {
+      res.status(400);
+      throw new Error('Payment signature verification failed. Transaction was not verified.');
+    }
   }
 
   const booking = await Booking.findById(bookingId);
@@ -354,13 +385,15 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
   const effectiveCouponCode = effectiveCouponCodeRaw ? effectiveCouponCodeRaw.toUpperCase() : undefined;
   const bookingTotal = Number(booking.totalAmount || classItem.price || 0) || 0;
 
+  const actualReference = reference || req.body.razorpay_payment_id || undefined;
+
   const created = await Payment.create({
     userId: req.user._id,
     bookingId,
     amount: bookingTotal,
     paymentMethod: paymentMethod || 'card',
     status: 'paid',
-    reference,
+    reference: actualReference,
     last4,
     locationId: booking.locationId,
     promotionId,
@@ -375,7 +408,7 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
     for (const gb of groupBookings) {
       gb.status = 'confirmed';
       gb.paymentStatus = 'completed';
-      gb.paymentReference = reference;
+      gb.paymentReference = actualReference;
       gb.paymentId = created._id;
       gb.paymentDate = new Date();
       await gb.save();
@@ -383,7 +416,7 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
   } else {
     booking.status = 'confirmed';
     booking.paymentStatus = 'completed';
-    booking.paymentReference = reference;
+    booking.paymentReference = actualReference;
     booking.paymentId = created._id;
     booking.paymentDate = new Date();
     booking.discountAmount = effectiveDiscount;

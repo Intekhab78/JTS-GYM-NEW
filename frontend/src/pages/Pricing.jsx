@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/api.js';
+import PaymentForm from '../components/PaymentForm.jsx';
+
 import Navbar from '../components/Navbar.jsx';
 import Footer from '../components/Footer.jsx';
 import SectionTitle from '../components/SectionTitle.jsx';
@@ -269,8 +271,76 @@ export default function Pricing() {
 
   const finalTotalAmount = activeTax?.calculationMethod === 'inclusive' ? taxableAmount : (taxableAmount + currTaxValue);
 
+  const handleCheckoutWithRazorpay = async (razorpayDetails) => {
+    setMessage('');
+    setError('');
+    if (!selectedPlan) return;
+
+    // GENDER VALIDATION
+    const user = getUser();
+    if (selectedPlan.gender && selectedPlan.gender !== 'mixed') {
+       let pGender = '';
+       if (selectedChildId === 'self') {
+          pGender = user?.gender;
+       } else if (selectedChildId) {
+          const child = children.find(c => c._id === selectedChildId);
+          pGender = child?.gender;
+       }
+       if (pGender && pGender !== 'other' && pGender !== selectedPlan.gender) {
+          setError(`Gender Mismatch: This membership is restricted to ${selectedPlan.gender}s only.`);
+          return;
+       }
+    }
+
+    setIsProcessing(true);
+    try {
+      const payment = await api.post('/payments', {
+        planId: selectedPlan._id,
+        amount: Math.round(finalTotalAmount * 100) / 100,
+        discountAmount,
+        couponAmount: currentCouponAmount,
+        couponCode: appliedCoupons.length > 0 ? appliedCoupons.map(c => c.code).join(', ') : undefined,
+        appliedCoupons,
+        taxAmount: Math.round(currTaxValue * 100) / 100,
+        promotionId: selectedPromo?._id,
+        paymentMethod: 'online',
+        membershipUnits,
+        ...razorpayDetails
+      });
+
+      await api.post('/memberships', {
+        planId: selectedPlan._id,
+        paymentId: payment.data._id,
+        childId: selectedChildId === 'self' ? null : (selectedChildId || null),
+        preferredDays,
+        preferredSlots,
+        sessionsPerWeek: totalWeeklySessions,
+        claimBogo,
+        bogoChildId: bogoChildId || (selectedChildId === 'self' ? null : selectedChildId),
+        membershipUnits,
+        startDate,
+        discountAmount,
+        couponCode: appliedCoupons.length > 0 ? appliedCoupons.map(c => c.code).join(', ') : undefined,
+        couponAmount: currentCouponAmount,
+        appliedCoupons,
+        promotionId: selectedPromo?._id,
+        upgradeFromMembershipId: upgradeMembership?._id
+      });
+
+      setMessage('Payment successful! Your schedule has been generated.');
+      setTimeout(() => {
+        closeCheckout();
+        navigate('/dashboard');
+      }, 2000);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Payment failed. Try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleCheckout = async (event) => {
-    event.preventDefault();
+    if (event) event.preventDefault();
     setMessage('');
     setError('');
 
@@ -1102,95 +1172,44 @@ export default function Pricing() {
                     </div>
                   </div>
 
-                  <form onSubmit={handleCheckout} className="space-y-4">
-                    {paymentType === 'online' ? (
-                       <div className="space-y-4 animate-in fade-in duration-300">
-                         <div className="space-y-4">
-                           <input
-                             type="text"
-                             name="name"
-                             value={cardForm.name}
-                             onChange={handleCardChange}
-                             className="w-full rounded-2xl bg-slate-50 p-4 text-sm font-bold"
-                             placeholder="Cardholder Name"
-                             required
-                           />
-                           <input
-                             type="text"
-                             name="number"
-                             value={cardForm.number}
-                             onChange={handleCardChange}
-                             className="w-full rounded-2xl bg-slate-50 p-4 text-sm font-bold font-mono"
-                             placeholder="Card Number"
-                             required
-                           />
-                           <div className="grid grid-cols-2 gap-4">
-                             <input
-                               type="text"
-                               name="expiry"
-                               value={cardForm.expiry}
-                               onChange={handleCardChange}
-                               className="w-full rounded-2xl bg-slate-50 p-4 text-sm font-bold text-center"
-                               placeholder="MM/YY"
-                               required
-                             />
-                             <input
-                               type="password"
-                               name="cvc"
-                               value={cardForm.cvc}
-                               onChange={handleCardChange}
-                               className="w-full rounded-2xl bg-slate-50 p-4 text-sm font-bold text-center"
-                               placeholder="CVC"
-                               required
-                             />
+                  {paymentType === 'online' ? (
+                     <PaymentForm
+                       totalAmount={Math.round(finalTotalAmount * 100) / 100}
+                       onSubmit={handleCheckoutWithRazorpay}
+                       onCancel={() => setPaymentType('')}
+                       prefillName={getUser()?.name}
+                       prefillEmail={getUser()?.email}
+                       prefillPhone={getUser()?.phone}
+                     />
+                  ) : (
+                     <form onSubmit={handleCheckout} className="space-y-4">
+                        <div className="animate-in slide-in-from-top-4 duration-500">
+                           <div className="p-8 rounded-[32px] bg-emerald-50/50 border-2 border-dashed border-emerald-200 text-center mb-6">
+                              <span className="text-4xl block mb-4">✅</span>
+                              <h4 className="text-lg font-black text-emerald-900 mb-2">Ready to Book?</h4>
+                              <p className="text-sm text-emerald-700/70 font-bold leading-relaxed">
+                                 You will pay at the reception when you visit the center. Your sessions will be held for you.
+                              </p>
                            </div>
-                         </div>
-                         <button 
-                            type="submit" 
-                            disabled={isProcessing}
-                            className="w-full rounded-2xl bg-brand-blue py-5 text-white font-black shadow-xl mt-4 flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
-                         >
-                           {isProcessing ? (
-                              <>
-                                 <div className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin" />
-                                 <span>Processing...</span>
-                              </>
-                           ) : (
-                              <>
-                                 <span>🔒 Securely Pay {currency} {finalTotalAmount.toFixed(2)}</span>
-                              </>
-                           )}
-                         </button>
-                         <p className="text-center text-[10px] font-bold text-ink/20 uppercase tracking-widest pt-2">Protected by 256-bit SSL encryption</p>
-                       </div>
-                    ) : (
-                       <div className="animate-in slide-in-from-top-4 duration-500">
-                          <div className="p-8 rounded-[32px] bg-emerald-50/50 border-2 border-dashed border-emerald-200 text-center mb-6">
-                             <span className="text-4xl block mb-4">✅</span>
-                             <h4 className="text-lg font-black text-emerald-900 mb-2">Ready to Book?</h4>
-                             <p className="text-sm text-emerald-700/70 font-bold leading-relaxed">
-                                You will pay at the reception when you visit the center. Your sessions will be held for you.
-                             </p>
-                          </div>
-                          <button 
-                            type="submit" 
-                            disabled={isProcessing}
-                            className="w-full rounded-2xl bg-brand-blue py-5 text-white font-black shadow-xl flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
-                          >
-                            {isProcessing ? (
-                               <>
-                                  <div className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin" />
-                                  <span>Confirming...</span>
-                               </>
-                            ) : (
-                               <>
-                                  <span>Confirm Booking & Pay at Center →</span>
-                               </>
-                            )}
-                          </button>
-                       </div>
-                    )}
-                  </form>
+                           <button 
+                             type="submit" 
+                             disabled={isProcessing}
+                             className="w-full rounded-2xl bg-brand-blue py-5 text-white font-black shadow-xl flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
+                           >
+                             {isProcessing ? (
+                                <>
+                                   <div className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                                   <span>Processing...</span>
+                                </>
+                             ) : (
+                                <>
+                                   <span>🔒 Confirm and Book Now</span>
+                                </>
+                             )}
+                           </button>
+                        </div>
+                     </form>
+                  )}
                 </div>
 
               )}

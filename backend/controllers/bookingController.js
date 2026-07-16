@@ -22,6 +22,8 @@ import { calculateTax } from '../utils/taxCalculator.js';
 import Coupon from '../models/Coupon.js';
 import { withUAT } from '../middleware/uatMiddleware.js';
 import { getTransactionSnapshots } from '../utils/snapshotUtils.js';
+import { verifySignature } from './razorpayController.js';
+
 
 export const getMyBookings = asyncHandler(async (req, res) => {
   const bookings = await Booking.find(withUAT(req, {
@@ -899,6 +901,20 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
   const resolvedSessionIds = sessionIds || sessions;
   if (!participants?.length || !resolvedSessionIds?.length) throw new Error('Missing details');
 
+  if (paymentMethod === 'online') {
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      res.status(400);
+      throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
+    }
+    
+    const isValid = verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    if (!isValid) {
+      res.status(400);
+      throw new Error('Payment signature verification failed. Transaction was not verified.');
+    }
+  }
+
   if (!req.user && (!guestDetails || !guestDetails.name || !guestDetails.email)) {
     res.status(400);
     throw new Error('Must be logged in or provide guest details');
@@ -983,7 +999,7 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
         status: (paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'confirmed' : 'pending',
         paymentStatus: (paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'completed' : 'pending',
         paymentMethod: paymentMethod || 'center',
-        paymentReference: vendorReference || undefined,
+        paymentReference: vendorReference || req.body.razorpay_payment_id || undefined,
         splitDetails: req.body.splitDetails || [],
         promotionId,
         discountAmount: dDisc,
@@ -1105,7 +1121,7 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     status: (totalAmount === 0 || paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'paid' : 'pending', 
     locationId,
     paymentMethod,
-    reference: vendorReference || undefined,
+    reference: vendorReference || req.body.razorpay_payment_id || undefined,
     splitDetails: req.body.splitDetails || [],
     discountAmount: discountAmount || 0,
     couponCode,

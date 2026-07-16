@@ -7,6 +7,8 @@ import api from '../../api/api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import LocationPicker from '../../components/LocationPicker.jsx';
 import ExtensionRequestForm from '../../components/ExtensionRequestForm.jsx';
+import PaymentForm from '../../components/PaymentForm.jsx';
+
 
 // --- Sub-components for Schedule Views ---
 
@@ -239,8 +241,7 @@ export default function Membership() {
     setCardForm({ ...cardForm, [e.target.name]: e.target.value });
   };
 
-  const handleCheckout = async (e) => {
-    e.preventDefault();
+  const handleCheckoutWithRazorpay = async (razorpayDetails) => {
     setMessage('');
     setError('');
     setLoading(true);
@@ -270,12 +271,6 @@ export default function Membership() {
       return;
     }
 
-    if (!cardForm.name || !cardForm.number || !cardForm.expiry || !cardForm.cvc) {
-      setError('Please complete card details.');
-      setLoading(false);
-      return;
-    }
-
     try {
       const payableAmount = Math.max(0, (selectedPlan.price || 0) - (couponAmount || 0));
 
@@ -283,12 +278,11 @@ export default function Membership() {
       const payment = await api.post('/payments', {
         planId: selectedPlan._id,
         amount: Math.round(payableAmount * 100) / 100,
-        paymentMethod: 'card',
-        reference: `mock_dash_${Date.now()}`,
-        last4: cardForm.number.slice(-4),
+        paymentMethod: 'online',
         appliedCoupons,
         couponCode,
-        couponAmount
+        couponAmount,
+        ...razorpayDetails
       });
 
       // 2. Create Membership (New Atomic Flow)
@@ -311,7 +305,7 @@ export default function Membership() {
       setMessage('Enrollment successful! Your schedule has been generated.');
       fetchMemberships();
     } catch (err) {
-      setError(err.response?.data?.message || 'Checkout failed. Please check your card details.');
+      setError(err.response?.data?.message || 'Checkout failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -745,7 +739,7 @@ export default function Membership() {
             </div>
 
             <div className="p-10 max-h-[70vh] overflow-y-auto">
-              <form onSubmit={handleCheckout} className="space-y-10 text-left">
+              <div className="space-y-10 text-left">
                 {/* 1. Selection */}
                 <div className="space-y-6">
                   <label className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/30 ml-2">1. Select Participant</label>
@@ -932,54 +926,17 @@ export default function Membership() {
                 </div>
 
                 {/* 5. Payment */}
-                <div className="space-y-6">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/30 ml-2">5. Payment Details</label>
-                  <div className="space-y-3">
-                    <input
-                      className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-xs"
-                      placeholder="Name on Card"
-                      name="name"
-                      value={cardForm.name}
-                      onChange={handleCardChange}
-                    />
-                    <input
-                      className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-xs"
-                      placeholder="Card Number"
-                      name="number"
-                      value={cardForm.number}
-                      onChange={handleCardChange}
-                    />
-                    <div className="grid grid-cols-2 gap-3">
-                      <input
-                        className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-xs"
-                        placeholder="MM/YY"
-                        name="expiry"
-                        value={cardForm.expiry}
-                        onChange={handleCardChange}
-                      />
-                      <input
-                        className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-xs"
-                        placeholder="CVC"
-                        name="cvc"
-                        value={cardForm.cvc}
-                        onChange={handleCardChange}
-                      />
-                    </div>
-                  </div>
+                <div className="space-y-6 pt-4 border-t border-slate-100">
+                  <PaymentForm
+                    totalAmount={Math.max(0, (selectedPlan?.price || 0) - couponAmount)}
+                    onSubmit={handleCheckoutWithRazorpay}
+                    onCancel={closeCheckout}
+                    prefillName={user?.name}
+                    prefillEmail={user?.email}
+                    prefillPhone={user?.phone}
+                  />
                 </div>
-
-                <div className="pt-4">
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-brand-blue text-white py-5 rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-2xl shadow-brand-blue/20 hover:shadow-brand-blue/40 transition-all hover:-translate-y-1 flex items-center justify-center gap-3 disabled:opacity-50"
-                  >
-                    {loading ? 'Processing...' : `Pay {currency} ${Math.max(0, (selectedPlan?.price || 0) - couponAmount)}`}
-                    {!loading && <span>➜</span>}
-                  </button>
-                  <p className="mt-4 text-center text-[8px] font-black text-ink/20 uppercase tracking-[0.2em]">Secure 256-bit SSL Encrypted Transaction</p>
-                </div>
-              </form>
+              </div>
             </div>
           </div>
         </div>

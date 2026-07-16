@@ -54,6 +54,8 @@ import brandRoutes from './routes/brandRoutes.js';
 import cmsRoutes from './routes/cmsRoutes.js';
 import vendorRoutes from './routes/vendorRoutes.js';
 import { initCronJobs } from './utils/cronJobs.js';
+import { handleWebhook } from './controllers/razorpayController.js';
+
 
 const app = express();
 const httpServer = createServer(app);
@@ -86,7 +88,11 @@ io.on('connection', (socket) => {
   });
 });
 
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(cors({
   origin: allowedOrigins,
   credentials: true
@@ -105,6 +111,10 @@ app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'jts-booking-backend' });
 });
+
+// Match exact Webhook URL from your Razorpay Dashboard
+app.post('/api/razorpay-webhooks/razorpay', handleWebhook);
+
 
 app.use('/api/auth', authRoutes);
 app.use('/api/locations', locationRoutes);

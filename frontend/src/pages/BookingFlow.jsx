@@ -447,7 +447,7 @@ export default function BookingFlow() {
     }
   };
 
-  const handleCreateBooking = async () => {
+  const handleCreateBooking = async (razorpayDetails) => {
     setLoading(true);
     try {
       // Calculate per-session proportion of the total discount
@@ -467,7 +467,8 @@ export default function BookingFlow() {
           discountAmount: discountAmount,
           appliedCoupons,
           couponCode,
-          couponAmount: couponAmount
+          couponAmount: couponAmount,
+          ...razorpayDetails
         };
         const res = await api.post('/bookings/group', payload);
         sessionStorage.removeItem('booking_pending_state');
@@ -486,7 +487,8 @@ export default function BookingFlow() {
           discountAmount,
           appliedCoupons,
           couponCode,
-          couponAmount
+          couponAmount,
+          ...razorpayDetails
         };
         const res = await api.post('/bookings/group', payload);
         sessionStorage.removeItem('booking_pending_state');
@@ -1421,6 +1423,9 @@ export default function BookingFlow() {
                     totalAmount={Math.max(0, (totalPrice - discountAmount - couponAmount) + (activeTax?.calculationMethod === 'inclusive' ? 0 : taxAmount))}
                     onSubmit={handleCreateBooking}
                     onCancel={() => { setPaymentType(''); setStep(6); }}
+                    prefillName={getUser()?.name || guestDetails?.name}
+                    prefillEmail={getUser()?.email || guestDetails?.email}
+                    prefillPhone={getUser()?.phone || guestDetails?.phone}
                   />
                 ) : (
                   <>

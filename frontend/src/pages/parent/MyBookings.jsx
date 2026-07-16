@@ -5,6 +5,8 @@ import Footer from '../../components/Footer.jsx';
 import api from '../../api/api.js';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import ReviewModal from '../../components/ReviewModal.jsx';
+import PaymentForm from '../../components/PaymentForm.jsx';
+
 
 // - [x] Populate `planId` in `getMyBookings` (Backend) <!-- id: 67 -->
 // - [/] Update `MyBookings.jsx` UI to display package names <!-- id: 68 -->
@@ -140,25 +142,15 @@ export default function MyBookings() {
     setCardForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handlePay = async (event) => {
-    event.preventDefault();
+  const handlePayWithRazorpay = async (razorpayDetails) => {
     if (!selectedBooking) return;
-
-    if (!cardForm.name || !cardForm.number || !cardForm.expiry || !cardForm.cvc) {
-      setError('Please complete card details.');
-      return;
-    }
-
-    const last4 = cardForm.number.replace(/\s/g, '').slice(-4);
-    const reference = `mock_${Date.now()}`;
 
     try {
       setIsSubmitting(true);
       await api.post('/payments/booking', {
         bookingId: selectedBooking._id,
-        paymentMethod: 'card',
-        reference,
-        last4
+        paymentMethod: 'online',
+        ...razorpayDetails
       });
       setMessage('Payment successful. Booking confirmed.');
       closePayment();
@@ -442,80 +434,11 @@ export default function MyBookings() {
             </div>
 
             <div className="p-6">
-              <div className="mb-6 rounded-xl bg-amber-50 p-3 text-xs text-amber-700">
-                <p>This is a secure simulation. No real money will be charged.</p>
-              </div>
-
-              <form className="grid gap-4" onSubmit={handlePay}>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-ink/50 px-1">Cardholder Name</label>
-                  <input
-                    className="w-full rounded-xl border border-ink/10 bg-slate-50 p-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-coral/20 transition"
-                    name="name"
-                    placeholder="e.g. John Doe"
-                    value={cardForm.name}
-                    onChange={handleCardChange}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-ink/50 px-1">Card Number</label>
-                  <input
-                    className="w-full rounded-xl border border-ink/10 bg-slate-50 p-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-coral/20 transition"
-                    name="number"
-                    placeholder="0000 0000 0000 0000"
-                    value={cardForm.number}
-                    onChange={handleCardChange}
-                  />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-ink/50 px-1">Expiry Date</label>
-                    <input
-                      className="w-full rounded-xl border border-ink/10 bg-slate-50 p-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-coral/20 transition"
-                      name="expiry"
-                      placeholder="MM/YY"
-                      value={cardForm.expiry}
-                      onChange={handleCardChange}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-ink/50 px-1">CVC</label>
-                    <input
-                      className="w-full rounded-xl border border-ink/10 bg-slate-50 p-3 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-coral/20 transition"
-                      name="cvc"
-                      placeholder="123"
-                      value={cardForm.cvc}
-                      onChange={handleCardChange}
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-6 flex flex-col gap-3">
-                  <button
-                    className="w-full rounded-2xl bg-brand-blue py-5 text-sm font-black text-white shadow-xl shadow-brand-blue/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
-                    type="submit"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        <span>Processing Payment...</span>
-                      </>
-                    ) : (
-                      `Pay {currency} ${selectedBooking.totalAmount || selectedBooking.classId?.price || 0}`
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full rounded-2xl border-2 border-slate-100 py-4 text-[10px] font-black uppercase tracking-widest text-ink/30 transition-all hover:bg-slate-50 hover:text-ink/50"
-                    onClick={closePayment}
-                  >
-                    Cancel Transaction
-                  </button>
-                </div>
-              </form>
+              <PaymentForm
+                totalAmount={selectedBooking.totalAmount || selectedBooking.classId?.price || 0}
+                onSubmit={handlePayWithRazorpay}
+                onCancel={closePayment}
+              />
             </div>
           </div>
         </div>
