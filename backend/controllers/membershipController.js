@@ -546,8 +546,23 @@ export const createMembership = asyncHandler(async (req, res) => {
     }
   }
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  let session = null;
+  let transactionStarted = false;
+
+  const topologyType = mongoose.connection.client?.topology?.description?.type;
+  const supportsTransactions = topologyType && !topologyType.toLowerCase().includes('single');
+
+  if (supportsTransactions) {
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+      transactionStarted = true;
+    } catch (e) {
+      console.warn("Could not start transaction, falling back to non-transaction mode:", e.message);
+      session = null;
+      transactionStarted = false;
+    }
+  }
 
   try {
     const [primaryMembership] = await Membership.create([{
@@ -970,7 +985,9 @@ export const createMembership = asyncHandler(async (req, res) => {
       }
     }
 
-    await session.commitTransaction();
+    if (session && transactionStarted) {
+      await session.commitTransaction();
+    }
 
     const final = await Membership.findById(primaryMembership._id)
       .populate('userId', 'name email firstName lastName')
@@ -981,7 +998,7 @@ export const createMembership = asyncHandler(async (req, res) => {
 
     res.status(201).json(final);
   } catch (err) {
-    if (session.inTransaction()) {
+    if (session && transactionStarted && typeof session.inTransaction === 'function' && session.inTransaction()) {
       await session.abortTransaction();
     }
     console.error('[Transaction Abort] Internal Error:', err.message);
@@ -991,7 +1008,9 @@ export const createMembership = asyncHandler(async (req, res) => {
       paymentId
     });
   } finally {
-    session.endSession();
+    if (session) {
+      session.endSession();
+    }
   }
 });
 
