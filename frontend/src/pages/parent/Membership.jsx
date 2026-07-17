@@ -306,6 +306,7 @@ export default function Membership() {
       fetchMemberships();
     } catch (err) {
       setError(err.response?.data?.message || 'Checkout failed. Please try again.');
+      throw err;
     } finally {
       setLoading(false);
     }

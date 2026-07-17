@@ -157,6 +157,7 @@ export default function MyBookings() {
       load();
     } catch (err) {
       setError(err?.response?.data?.message || 'Payment failed.');
+      throw err;
     } finally {
       setIsSubmitting(false);
     }

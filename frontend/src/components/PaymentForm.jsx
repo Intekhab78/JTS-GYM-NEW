@@ -44,13 +44,20 @@ export default function PaymentForm({ totalAmount, onSubmit, onCancel, prefillNa
         description: 'Kids Fitness Booking & Membership Payment',
         image: 'https://gymapi.jtsonline.shop/uploads/logo.png', // Logo path
         order_id: order.id,
-        handler: function (response) {
-          // On payment success: verify on backend
-          onSubmit({
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_signature: response.razorpay_signature
-          });
+        handler: async function (response) {
+          setLoading(true);
+          try {
+            await onSubmit({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature
+            });
+          } catch (err) {
+            setLoading(false);
+            const errMsg = err?.response?.data?.message || err.message || 'Verification failed';
+            setError(errMsg);
+            toast.error(errMsg);
+          }
         },
         prefill: {
           name: name,

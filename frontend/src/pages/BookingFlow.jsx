@@ -497,6 +497,7 @@ export default function BookingFlow() {
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create booking');
+      throw err;
     } finally {
       setLoading(false);
     }

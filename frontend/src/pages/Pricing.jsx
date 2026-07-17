@@ -334,6 +334,7 @@ export default function Pricing() {
       }, 2000);
     } catch (err) {
       setError(err?.response?.data?.message || 'Payment failed. Try again.');
+      throw err;
     } finally {
       setIsProcessing(false);
     }
