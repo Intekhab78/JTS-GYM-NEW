@@ -58,12 +58,12 @@ export const getBookingSchedule = asyncHandler(async (req, res) => {
 
   // FETCH ATTENDANCE DATA
   const atts = await Attendance.find({ membershipId: membership._id }).lean();
-  
+
   const now = new Date();
   const enrichedSessions = (membership.generatedSessions || []).map(session => {
     const sObj = session.toObject ? session.toObject() : { ...session };
     const att = atts.find(a => a.sessionId?.toString() === sObj._id.toString());
-    
+
     let attendanceStatus = sObj.attendanceStatus || 'pending';
     if (att) {
       attendanceStatus = (att.status === 'present' || att.status === 'completed') ? 'present' : 'absent';
@@ -484,7 +484,7 @@ export const createBooking = asyncHandler(async (req, res) => {
     });
   }
 
-  await Payment.create({
+  const createdPayment = await Payment.create({
     userId: created.userId,
     bookingId: created._id,
     amount: totalAmount,
@@ -504,7 +504,7 @@ export const createBooking = asyncHandler(async (req, res) => {
     if (shift && shift.currentDenominations) {
       const prevDenoms = { ...shift.currentDenominations };
       const currentDenoms = { ...shift.currentDenominations };
-      
+
       if (receivedDenominations) {
         Object.entries(receivedDenominations).forEach(([val, count]) => {
           if (count) {
@@ -572,7 +572,11 @@ export const createBooking = asyncHandler(async (req, res) => {
     }
   }
 
-  res.status(201).json(created);
+  const createdResponse = typeof created.toObject === 'function' ? created.toObject() : created;
+  if (createdPayment && createdPayment.reference) {
+    createdResponse.paymentReference = createdPayment.reference;
+  }
+  res.status(201).json(createdResponse);
 });
 
 export const updateBookingStatus = asyncHandler(async (req, res) => {
@@ -702,11 +706,14 @@ export const updateBookingStatus = asyncHandler(async (req, res) => {
   if (finalStatus === 'confirmed') {
     booking.paymentStatus = 'completed';
     if (paymentMethod) booking.paymentMethod = `center_${paymentMethod}`;
+    if (req.body.splitDetails) booking.splitDetails = req.body.splitDetails;
+    
     const payRec = await Payment.findOne({ $or: [{ bookingId: booking._id }, { groupId: booking.groupId }] });
     if (payRec) {
       payRec.status = 'paid';
       payRec.paymentMethod = paymentMethod ? `center_${paymentMethod}` : 'center';
       if (reference) payRec.reference = reference;
+      if (req.body.splitDetails) payRec.splitDetails = req.body.splitDetails;
       await payRec.save();
     }
     const inv = await Invoice.findOne({ bookingId: booking._id });
@@ -719,7 +726,7 @@ export const updateBookingStatus = asyncHandler(async (req, res) => {
       const SessionModel = mongoose.model('Session');
       const membership = await MembershipModel.findOne({ bookingId: booking._id });
       const plan = await PlanModel.findById(booking.planId);
-      
+
       if (membership && plan) {
         // If rescueMissed is true, we remove them from past 'scheduled' sessions 
         // and extend the membership to allow regeneration
@@ -733,7 +740,7 @@ export const updateBookingStatus = asyncHandler(async (req, res) => {
 
           if (missedSessions.length > 0) {
             const missedIds = missedSessions.map(s => s._id.toString());
-            
+
             // 1. Decrement occupancy for missed sessions
             await SessionModel.updateMany(
               { _id: { $in: missedIds } },
@@ -754,7 +761,7 @@ export const updateBookingStatus = asyncHandler(async (req, res) => {
               newEnd.setDate(newEnd.getDate() + gapDays);
               membership.endDate = newEnd;
             }
-            
+
             membership.notes = (membership.notes || '') + `\n[${now.toLocaleDateString()}] Auto-rescued ${missedSessions.length} missed sessions due to late payment confirmation.`;
           }
         }
@@ -892,7 +899,7 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
   const { participants, sessionIds, sessions, classId: providedClassId, locationId: providedLocationId, corporateName, paymentMethod, promotionId, discountAmount, guestDetails, vendorReference, attachment } = req.body;
   let couponCode = req.body.couponCode;
   let couponAmount = req.body.couponAmount || 0;
-  
+
   if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
     couponCode = req.body.appliedCoupons.map(c => c.code).join(', ');
     couponAmount = req.body.appliedCoupons.reduce((sum, c) => sum + (c.amount || 0), 0);
@@ -907,7 +914,7 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
       res.status(400);
       throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
     }
-    
+
     const isValid = verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
     if (!isValid) {
       res.status(400);
@@ -938,9 +945,9 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
   const rawBaseAmount = (req.body.isVendorSale && req.body.vendorSalePrice !== undefined)
     ? Number(req.body.vendorSalePrice)
     : (classItem.price || 0) * count;
-  
+
   const basePricePerItem = rawBaseAmount / count;
-  
+
   const dDisc = (discountAmount || 0) / count;
   const dCoup = (couponAmount || 0) / count;
   const activeTax = await Tax.findOne({ locationId, status: 'active' });
@@ -1012,7 +1019,7 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
       bookings.push(b);
       totalAmount += singleTotal;
     }
-    
+
     // Increment session booked participants
     sess.bookedParticipants += participants.length;
     await sess.save();
@@ -1049,11 +1056,11 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     try {
       const module = await import('../services/schedulingService.js');
       getInvoiceNum = module.getNextInvoiceNumber || (async () => `INV-${Date.now()}`);
-    } catch(e) {
+    } catch (e) {
       getInvoiceNum = async () => `INV-${Date.now()}`;
     }
     const invoiceNumber = await getInvoiceNum();
-    
+
     let vendorName = '';
     if (req.body.isVendorSale && req.body.vendorId) {
       try {
@@ -1063,10 +1070,10 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
         console.error('Error fetching vendor:', e);
       }
     }
-    
+
     const invoiceDesc = `${classItem.title} - Group Booking${req.body.isVendorSale ? ` (via ${vendorName || 'Vendor'})` : ''}`;
     const invoiceItems = [];
-    
+
     if (req.body.isVendorSale && req.body.vendorSalePrice !== undefined) {
       const trueBase = (classItem.price || 0) * count;
       const vendorDiscount = trueBase - Number(req.body.vendorSalePrice);
@@ -1078,7 +1085,7 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
       invoiceItems.push({ description: invoiceDesc, quantity: count, unitPrice: basePricePerItem, total: rawBaseAmount });
     }
     if (discountAmount > 0) invoiceItems.push({ description: 'Promotion Discount', quantity: 1, unitPrice: -discountAmount, total: -discountAmount });
-    
+
     if (couponAmount > 0) {
       if (req.body.appliedCoupons && req.body.appliedCoupons.length > 0) {
         req.body.appliedCoupons.forEach(c => {
@@ -1112,13 +1119,13 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
 
   const gymRevenue = req.body.isVendorSale ? (Number(req.body.vendorSalePrice) - Number(req.body.vendorMargin || 0)) : undefined;
 
-  await Payment.create({ 
-    userId: req.user && req.body.userId ? req.body.userId : (req.user ? req.user._id : undefined), 
-    guestDetails: !req.user ? guestDetails : undefined, 
-    amount: totalAmount, 
-    groupId: groupBookingId, 
+  const createdPayment = await Payment.create({
+    userId: req.user && req.body.userId ? req.body.userId : (req.user ? req.user._id : undefined),
+    guestDetails: !req.user ? guestDetails : undefined,
+    amount: totalAmount,
+    groupId: groupBookingId,
     bookingId: bookings[0]._id,
-    status: (totalAmount === 0 || paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'paid' : 'pending', 
+    status: (totalAmount === 0 || paymentMethod === 'online' || paymentMethod === 'cash' || paymentMethod === 'card' || paymentMethod === 'split' || paymentMethod === 'terminal' || req.body.paymentStatus === 'completed') ? 'paid' : 'pending',
     locationId,
     paymentMethod,
     reference: vendorReference || req.body.razorpay_payment_id || undefined,
@@ -1131,9 +1138,10 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     vendorId: req.body.isVendorSale ? req.body.vendorId : undefined,
     vendorSalePrice: req.body.isVendorSale ? Number(req.body.vendorSalePrice) : undefined,
     vendorMargin: req.body.isVendorSale ? Number(req.body.vendorMargin) : undefined,
-    gymRevenue
+    gymRevenue,
+    isUAT: req.isUAT || false
   });
-  
+
   // DENOMINATIONS TRACKING LOGIC
   const { receivedDenominations, changeDenominations } = req.body;
   if ((receivedDenominations || changeDenominations) && req.user) {
@@ -1141,7 +1149,7 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
     if (shift && shift.currentDenominations) {
       const prevDenoms = { ...shift.currentDenominations };
       const currentDenoms = { ...shift.currentDenominations };
-      
+
       if (receivedDenominations) {
         Object.entries(receivedDenominations).forEach(([val, count]) => {
           if (count) {
@@ -1167,9 +1175,13 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
       await shift.save();
     }
   }
-  
+
   // Return the bookings array along with group info
-  res.status(201).json({ groupBookingId, bookingCount: bookings.length, totalAmount, bookings });
+  const bookingsResponse = bookings.map(b => typeof b.toObject === 'function' ? b.toObject() : b);
+  if (createdPayment && createdPayment.reference && bookingsResponse.length > 0) {
+    bookingsResponse[0].paymentReference = createdPayment.reference;
+  }
+  res.status(201).json({ groupBookingId, bookingCount: bookings.length, totalAmount, bookings: bookingsResponse });
 });
 
 export const sendReminder = asyncHandler(async (req, res) => {

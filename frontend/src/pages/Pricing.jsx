@@ -36,6 +36,7 @@ export default function Pricing() {
   const [bogoChildId, setBogoChildId] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
   const [checkoutStep, setCheckoutStep] = useState(1);
+  const [completedMembership, setCompletedMembership] = useState(null);
   const [activeTax, setActiveTax] = useState(null);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -58,7 +59,7 @@ export default function Pricing() {
       const locationId = getLocationId();
       const res = await api.get('/plans', { params: { locationId } });
       setPlans(res.data);
-      
+
       const catRes = await api.get('/categories?status=active&type=membership');
       setCategories(catRes.data || []);
     } catch (err) {
@@ -70,16 +71,16 @@ export default function Pricing() {
 
   useEffect(() => {
     fetchPlans();
-    
+
     // Fetch global settings
     api.get('/settings/global').then(res => {
       const settingsMap = {};
       res.data.forEach(s => { settingsMap[s.key] = s.value; });
       setGlobalSettings(settingsMap);
-      
+
       const urlParams = new URLSearchParams(window.location.search);
       const upgradeId = urlParams.get('upgrade');
-      
+
       if (upgradeId) {
         api.get('/memberships/mine').then(mRes => {
           const m = mRes.data.find(x => x._id === upgradeId);
@@ -88,7 +89,7 @@ export default function Pricing() {
             // Calculate Proration Credit
             let unusedValue = 0;
             const totalPaid = m.bookingId?.totalAmount || m.planId?.price || 0;
-            
+
             if (m.planId?.type === 'credit-based' && m.planId.creditsIncluded) {
               const totalCredits = (m.planId.creditsIncluded || 0) * (m.membershipUnits || 1);
               unusedValue = totalCredits > 0 ? (m.creditsRemaining / totalCredits) * totalPaid : 0;
@@ -107,9 +108,9 @@ export default function Pricing() {
             }
             setProrationCredit(Math.max(0, Math.round(unusedValue * 100) / 100));
           }
-        }).catch(() => {});
+        }).catch(() => { });
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     const handleChange = () => fetchPlans();
     window.addEventListener('location-change', handleChange);
@@ -125,12 +126,12 @@ export default function Pricing() {
     setShowCheckout(true);
     setMessage('');
     setError('');
-    
+
     // Fetch children for selection
     api.get('/children/mine').then(res => {
       setChildren(res.data || []);
       if (res.data?.length > 0) setSelectedChildId(res.data[0]._id);
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Fetch applicable promotions
     const locationId = getLocationId();
@@ -163,9 +164,10 @@ export default function Pricing() {
     setSelectedPromo(null);
     setDiscountAmount(0);
     setCheckoutStep(1);
+    setCompletedMembership(null);
     setActiveTax(null);
     setCouponInput('');
-    setAppliedCoupon(null);
+    setAppliedCoupons([]);
     setPaymentType('online');
     setIsProcessing(false);
     setCardForm({ name: '', number: '', expiry: '', cvc: '' });
@@ -216,7 +218,7 @@ export default function Pricing() {
 
   const calculateDiscount = (promo, basePrice) => {
     if (!promo || !basePrice) return 0;
-    
+
     const calcByType = (type, val) => {
       if (type === 'percentage') return basePrice * (val / 100);
       return Math.min(basePrice, val);
@@ -260,11 +262,11 @@ export default function Pricing() {
   const currTaxValue = (() => {
     if (!activeTax || !taxableAmount) return 0;
     if (activeTax.type === 'percentage') {
-       if (activeTax.calculationMethod === 'inclusive') {
-          return taxableAmount - (taxableAmount / (1 + (activeTax.value / 100)));
-       } else {
-          return taxableAmount * (activeTax.value / 100);
-       }
+      if (activeTax.calculationMethod === 'inclusive') {
+        return taxableAmount - (taxableAmount / (1 + (activeTax.value / 100)));
+      } else {
+        return taxableAmount * (activeTax.value / 100);
+      }
     }
     return activeTax.value || 0;
   })();
@@ -279,17 +281,17 @@ export default function Pricing() {
     // GENDER VALIDATION
     const user = getUser();
     if (selectedPlan.gender && selectedPlan.gender !== 'mixed') {
-       let pGender = '';
-       if (selectedChildId === 'self') {
-          pGender = user?.gender;
-       } else if (selectedChildId) {
-          const child = children.find(c => c._id === selectedChildId);
-          pGender = child?.gender;
-       }
-       if (pGender && pGender !== 'other' && pGender !== selectedPlan.gender) {
-          setError(`Gender Mismatch: This membership is restricted to ${selectedPlan.gender}s only.`);
-          return;
-       }
+      let pGender = '';
+      if (selectedChildId === 'self') {
+        pGender = user?.gender;
+      } else if (selectedChildId) {
+        const child = children.find(c => c._id === selectedChildId);
+        pGender = child?.gender;
+      }
+      if (pGender && pGender !== 'other' && pGender !== selectedPlan.gender) {
+        setError(`Gender Mismatch: This membership is restricted to ${selectedPlan.gender}s only.`);
+        return;
+      }
     }
 
     setIsProcessing(true);
@@ -308,7 +310,7 @@ export default function Pricing() {
         ...razorpayDetails
       });
 
-      await api.post('/memberships', {
+      const membershipRes = await api.post('/memberships', {
         planId: selectedPlan._id,
         paymentId: payment.data._id,
         childId: selectedChildId === 'self' ? null : (selectedChildId || null),
@@ -327,11 +329,8 @@ export default function Pricing() {
         upgradeFromMembershipId: upgradeMembership?._id
       });
 
-      setMessage('Payment successful! Your schedule has been generated.');
-      setTimeout(() => {
-        closeCheckout();
-        navigate('/dashboard');
-      }, 2000);
+      setCompletedMembership(membershipRes.data);
+      setCheckoutStep(3);
     } catch (err) {
       setError(err?.response?.data?.message || 'Payment failed. Try again.');
       throw err;
@@ -346,12 +345,12 @@ export default function Pricing() {
     setError('');
 
     if (!selectedPlan) return;
-    
+
     if (paymentType === 'online') {
-       if (!cardForm.name || !cardForm.number || !cardForm.expiry || !cardForm.cvc) {
-          setError('Please complete card details.');
-          return;
-       }
+      if (!cardForm.name || !cardForm.number || !cardForm.expiry || !cardForm.cvc) {
+        setError('Please complete card details.');
+        return;
+      }
     }
 
     const last4 = paymentType === 'online' ? cardForm.number.replace(/\s/g, '').slice(-4) : undefined;
@@ -360,18 +359,18 @@ export default function Pricing() {
     const user = getUser();
     // GENDER VALIDATION
     if (selectedPlan.gender && selectedPlan.gender !== 'mixed') {
-       let pGender = '';
-       if (selectedChildId === 'self') {
-          pGender = user?.gender;
-       } else if (selectedChildId) {
-          const child = children.find(c => c._id === selectedChildId);
-          pGender = child?.gender;
-       }
+      let pGender = '';
+      if (selectedChildId === 'self') {
+        pGender = user?.gender;
+      } else if (selectedChildId) {
+        const child = children.find(c => c._id === selectedChildId);
+        pGender = child?.gender;
+      }
 
-       if (pGender && pGender !== 'other' && pGender !== selectedPlan.gender) {
-          setError(`Gender Mismatch: This membership is restricted to ${selectedPlan.gender}s only.`);
-          return;
-       }
+      if (pGender && pGender !== 'other' && pGender !== selectedPlan.gender) {
+        setError(`Gender Mismatch: This membership is restricted to ${selectedPlan.gender}s only.`);
+        return;
+      }
     }
 
     setIsProcessing(true);
@@ -392,7 +391,7 @@ export default function Pricing() {
         membershipUnits
       });
 
-      await api.post('/memberships', {
+      const membershipRes = await api.post('/memberships', {
         planId: selectedPlan._id,
         paymentId: payment.data._id,
         childId: selectedChildId === 'self' ? null : (selectedChildId || null),
@@ -411,11 +410,8 @@ export default function Pricing() {
         upgradeFromMembershipId: upgradeMembership?._id
       });
 
-      setMessage(paymentType === 'online' ? 'Payment successful! Your schedule has been generated.' : 'Booking confirmed! Please pay at the center to activate.');
-      setTimeout(() => {
-        closeCheckout();
-        navigate('/dashboard');
-      }, 2000);
+      setCompletedMembership(membershipRes.data);
+      setCheckoutStep(3);
     } catch (err) {
       setError(err?.response?.data?.message || 'Payment failed. Try again.');
     } finally {
@@ -511,10 +507,10 @@ export default function Pricing() {
                   {item.activePromotions?.length > 0 && (
                     <div className="absolute top-0 left-0 z-10">
                       <div className="bg-coral text-white text-[8px] font-black uppercase tracking-widest py-1.5 px-8 -rotate-45 -translate-x-[25%] translate-y-[20%] shadow-lg">
-                        {item.activePromotions[0].promoType === 'bogo' ? 'BOGO 1+1' : 
-                         item.activePromotions[0].promoType === 'flash' ? 'FLASH' : 
-                         item.activePromotions[0].promoType === 'percentage' ? `${item.activePromotions[0].discountValue}% OFF` :
-                         'OFFER'}
+                        {item.activePromotions[0].promoType === 'bogo' ? 'BOGO 1+1' :
+                          item.activePromotions[0].promoType === 'flash' ? 'FLASH' :
+                            item.activePromotions[0].promoType === 'percentage' ? `${item.activePromotions[0].discountValue}% OFF` :
+                              'OFFER'}
                       </div>
                     </div>
                   )}
@@ -560,27 +556,27 @@ export default function Pricing() {
 
                   <div className="flex items-center gap-4 text-xs font-bold text-ink/40">
                     <span className="flex items-center gap-1.5">
-                      <svg className="w-4 h-4 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                      <svg className="w-4 h-4 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                       {item.classesIncluded || (item.type === 'dropin' ? '1' : 'Unlimited')} Classes
                     </span>
                     {(item.durationValue && item.durationUnit) ? (
                       <span className="flex items-center gap-1.5">
-                        <svg className="w-4 h-4 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <svg className="w-4 h-4 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         {item.durationValue} {item.durationUnit.charAt(0).toUpperCase() + item.durationUnit.slice(1)}
                       </span>
                     ) : item.durationWeeks ? (
                       <span className="flex items-center gap-1.5">
-                        <svg className="w-4 h-4 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <svg className="w-4 h-4 text-brand-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         {Math.round(item.durationWeeks * 10) / 10} Weeks
                       </span>
                     ) : null}
                   </div>
-                  
+
                   <div className="flex flex-wrap items-center">
                     {item.bonusQuantity > 0 && (
                       <div className="mt-3 mr-2 text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-2 border border-emerald-100/50 shadow-sm">
                         <span>🎁</span>
-                        {item.bonusItemType === 'same' 
+                        {item.bonusItemType === 'same'
                           ? `+${item.bonusQuantity} FREE ${item.bonusQuantity === 1 ? 'Class' : 'Classes'}`
                           : `+${item.bonusQuantity} FREE ${item.bonusQuantity === 1 ? 'Class' : 'Classes'} of ${item.bonusItemName}`
                         }
@@ -601,8 +597,8 @@ export default function Pricing() {
                     <div className="mt-6 border-t border-slate-50 pt-4 flex flex-wrap gap-x-4 gap-y-2">
                       {item.benefits.map((benefit, bi) => (
                         <div key={bi} className="flex items-center gap-2 text-xs font-bold text-ink/60">
-                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                           {benefit}
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          {benefit}
                         </div>
                       ))}
                     </div>
@@ -663,12 +659,12 @@ export default function Pricing() {
                 <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-brand-blue/40">Membership Details</span>
                 <h2 className="text-2xl md:text-3xl font-black text-ink mt-1 leading-tight">{detailsPlan.name}</h2>
               </div>
-              <button 
+              <button
                 onClick={() => setDetailsPlan(null)}
                 className="w-8 h-8 md:w-10 md:h-10 shrink-0 rounded-full bg-slate-50 flex items-center justify-center text-ink/30 hover:bg-slate-100 hover:text-coral transition-all"
                 title="Close"
               >
-                <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
@@ -694,90 +690,90 @@ export default function Pricing() {
 
               <div className="flex flex-col gap-3">
                 {detailsPlan.bonusQuantity > 0 && (
-                   <div className="flex items-center gap-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-100 animate-in slide-in-from-bottom-2 duration-300">
-                      <span className="text-3xl">🎁</span>
-                      <div>
-                         <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Bonus Reward Included</p>
-                         <p className="text-lg font-black text-ink">
-                           {detailsPlan.bonusItemType === 'same'
-                             ? `${detailsPlan.bonusQuantity} Free ${detailsPlan.bonusQuantity === 1 ? 'Class' : 'Classes'}!`
-                             : `${detailsPlan.bonusQuantity} Free ${detailsPlan.bonusQuantity === 1 ? 'Class' : 'Classes'} of ${detailsPlan.bonusItemName}!`
-                           }
-                         </p>
-                         <p className="text-[10px] font-bold text-ink/50 mt-1">
-                            You will receive these bonus sessions automatically upon purchasing this plan.
-                         </p>
-                      </div>
-                   </div>
+                  <div className="flex items-center gap-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-100 animate-in slide-in-from-bottom-2 duration-300">
+                    <span className="text-3xl">🎁</span>
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Bonus Reward Included</p>
+                      <p className="text-lg font-black text-ink">
+                        {detailsPlan.bonusItemType === 'same'
+                          ? `${detailsPlan.bonusQuantity} Free ${detailsPlan.bonusQuantity === 1 ? 'Class' : 'Classes'}!`
+                          : `${detailsPlan.bonusQuantity} Free ${detailsPlan.bonusQuantity === 1 ? 'Class' : 'Classes'} of ${detailsPlan.bonusItemName}!`
+                        }
+                      </p>
+                      <p className="text-[10px] font-bold text-ink/50 mt-1">
+                        You will receive these bonus sessions automatically upon purchasing this plan.
+                      </p>
+                    </div>
+                  </div>
                 )}
                 {detailsPlan.bonuses && detailsPlan.bonuses.map((b, idx) => b.quantity > 0 && (
-                   <div key={`b-${idx}`} className="flex items-center gap-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-100 animate-in slide-in-from-bottom-2 duration-300">
-                      <span className="text-3xl">🎁</span>
-                      <div>
-                         <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Additional Bonus Reward</p>
-                         <p className="text-lg font-black text-ink">
-                           {b.itemType === 'same'
-                             ? `${b.quantity} Free ${b.quantity === 1 ? 'Class' : 'Classes'}!`
-                             : `${b.quantity} Free ${b.quantity === 1 ? 'Class' : 'Classes'} of ${b.itemName}!`
-                           }
-                         </p>
-                         <p className="text-[10px] font-bold text-ink/50 mt-1">
-                            You will receive these bonus sessions automatically upon purchasing this plan.
-                         </p>
-                      </div>
-                   </div>
+                  <div key={`b-${idx}`} className="flex items-center gap-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-100 animate-in slide-in-from-bottom-2 duration-300">
+                    <span className="text-3xl">🎁</span>
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Additional Bonus Reward</p>
+                      <p className="text-lg font-black text-ink">
+                        {b.itemType === 'same'
+                          ? `${b.quantity} Free ${b.quantity === 1 ? 'Class' : 'Classes'}!`
+                          : `${b.quantity} Free ${b.quantity === 1 ? 'Class' : 'Classes'} of ${b.itemName}!`
+                        }
+                      </p>
+                      <p className="text-[10px] font-bold text-ink/50 mt-1">
+                        You will receive these bonus sessions automatically upon purchasing this plan.
+                      </p>
+                    </div>
+                  </div>
                 ))}
               </div>
 
               {/* Advanced Specs Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                 <div className="flex items-center gap-3 p-3 rounded-xl bg-indigo-50/30 border border-indigo-50">
-                    <span className="text-lg">🏋️</span>
-                    <div>
-                       <p className="text-[8px] font-black uppercase text-indigo-400">Session Mode</p>
-                       <p className="text-xs font-bold text-ink capitalize">{detailsPlan.sessionType || 'Group'} Session</p>
-                    </div>
-                 </div>
-                 <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50/30 border border-emerald-50">
-                    <span className="text-lg">🗓️</span>
-                    <div>
-                       <p className="text-[8px] font-black uppercase text-emerald-500">Access Days</p>
-                       <p className="text-xs font-bold text-ink capitalize">{detailsPlan.validDays === 'both' ? 'All Days' : detailsPlan.validDays}</p>
-                    </div>
-                 </div>
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-indigo-50/30 border border-indigo-50">
+                  <span className="text-lg">🏋️</span>
+                  <div>
+                    <p className="text-[8px] font-black uppercase text-indigo-400">Session Mode</p>
+                    <p className="text-xs font-bold text-ink capitalize">{detailsPlan.sessionType || 'Group'} Session</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50/30 border border-emerald-50">
+                  <span className="text-lg">🗓️</span>
+                  <div>
+                    <p className="text-[8px] font-black uppercase text-emerald-500">Access Days</p>
+                    <p className="text-xs font-bold text-ink capitalize">{detailsPlan.validDays === 'both' ? 'All Days' : detailsPlan.validDays}</p>
+                  </div>
+                </div>
               </div>
 
               {/* Trainer Info (Added) */}
               {detailsPlan.trainerId && (
-                 <div className="flex items-center gap-4 p-4 rounded-2xl bg-brand-blue/5 border border-brand-blue/10 animate-in slide-in-from-bottom-2 duration-300">
-                    {detailsPlan.trainerId.avatarUrl ? (
-                       <img src={detailsPlan.trainerId.avatarUrl} alt={detailsPlan.trainerId.name} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
-                    ) : (
-                       <div className="w-12 h-12 rounded-full bg-brand-blue/10 flex items-center justify-center text-xl">👤</div>
-                    )}
-                    <div>
-                       <p className="text-[9px] font-black uppercase tracking-widest text-brand-blue">Dedicated Trainer</p>
-                       <p className="text-sm font-black text-ink">{detailsPlan.trainerId.name}</p>
-                       <p className="text-[9px] font-bold text-ink/40 uppercase">Assigned for all sessions</p>
-                    </div>
-                 </div>
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-brand-blue/5 border border-brand-blue/10 animate-in slide-in-from-bottom-2 duration-300">
+                  {detailsPlan.trainerId.avatarUrl ? (
+                    <img src={detailsPlan.trainerId.avatarUrl} alt={detailsPlan.trainerId.name} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-brand-blue/10 flex items-center justify-center text-xl">👤</div>
+                  )}
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-brand-blue">Dedicated Trainer</p>
+                    <p className="text-sm font-black text-ink">{detailsPlan.trainerId.name}</p>
+                    <p className="text-[9px] font-bold text-ink/40 uppercase">Assigned for all sessions</p>
+                  </div>
+                </div>
               )}
 
               {/* Limits & Rules */}
               <div className="bg-brand-blue/5 rounded-3xl p-5 space-y-3">
-                 <p className="text-[10px] font-black uppercase tracking-widest text-brand-blue mb-2">Membership Rules</p>
-                 <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-ink/60">Daily Booking Limit</span>
-                    <span className="text-xs font-black text-ink">{detailsPlan.dailyBookingLimit > 0 ? `${detailsPlan.dailyBookingLimit} Classes` : 'Unlimited'}</span>
-                 </div>
-                 <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-ink/60">Cancel Window</span>
-                    <span className="text-xs font-black text-ink">{detailsPlan.extensionRules?.cancellationWindow || 6} Hours</span>
-                 </div>
-                 <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-ink/60">Freeze Option</span>
-                    <span className="text-xs font-black text-emerald-600">{detailsPlan.extensionRules?.allowFreezing ? '✓ Supported' : '× Not Supported'}</span>
-                 </div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-brand-blue mb-2">Membership Rules</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-ink/60">Daily Booking Limit</span>
+                  <span className="text-xs font-black text-ink">{detailsPlan.dailyBookingLimit > 0 ? `${detailsPlan.dailyBookingLimit} Classes` : 'Unlimited'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-ink/60">Cancel Window</span>
+                  <span className="text-xs font-black text-ink">{detailsPlan.extensionRules?.cancellationWindow || 6} Hours</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-ink/60">Freeze Option</span>
+                  <span className="text-xs font-black text-emerald-600">{detailsPlan.extensionRules?.allowFreezing ? '✓ Supported' : '× Not Supported'}</span>
+                </div>
               </div>
 
               {/* Benefits Section */}
@@ -797,15 +793,15 @@ export default function Pricing() {
             </div>
 
 
-            
+
             <div className="mt-4 pt-4 border-t border-slate-50 shrink-0">
-               <button
-                 onClick={() => { setDetailsPlan(null); openCheckout(detailsPlan); }}
-                 className="w-full rounded-2xl bg-brand-blue py-4 md:py-5 text-white font-black shadow-lg shadow-brand-blue/20 hover:shadow-brand-blue/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
-               >
-                 Book This Plan
-               </button>
-               <p className="text-[8px] md:text-[9px] font-bold text-ink/20 text-center uppercase tracking-widest mt-3">Safe & Secure Payment via Stripe</p>
+              <button
+                onClick={() => { setDetailsPlan(null); openCheckout(detailsPlan); }}
+                className="w-full rounded-2xl bg-brand-blue py-4 md:py-5 text-white font-black shadow-lg shadow-brand-blue/20 hover:shadow-brand-blue/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Book This Plan
+              </button>
+              <p className="text-[8px] md:text-[9px] font-bold text-ink/20 text-center uppercase tracking-widest mt-3">Safe & Secure Payment via Stripe</p>
             </div>
           </div>
         </div>
@@ -853,7 +849,7 @@ export default function Pricing() {
                         const isSelected = preferredDays.includes(day);
                         const isLimitReached = !isSelected && selectedPlan?.sessionsPerWeek > 0 && preferredDays.length >= selectedPlan.sessionsPerWeek;
                         const isDisabled = (selectedPlan.validDays === 'weekday' && isWeekend) || (selectedPlan.validDays === 'weekend' && !isWeekend) || isLimitReached;
-                        
+
                         return (
                           <button
                             key={day}
@@ -883,31 +879,31 @@ export default function Pricing() {
                       ))}
                     </div>
                   </div>
-                  
+
                   <div className="text-left">
-                     <label className="text-[10px] font-black uppercase text-ink/30 ml-2 mb-2 block">4. Membership Start Date</label>
-                     <div className="bg-slate-50 p-4 rounded-3xl">
-                        <input 
-                           type="date"
-                           min={new Date().toISOString().split('T')[0]}
-                           value={startDate}
-                           onChange={(e) => setStartDate(e.target.value)}
-                           className="w-full bg-white rounded-xl py-3 px-4 text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-brand-blue/20"
-                        />
-                        <p className="text-[9px] font-bold text-ink/20 uppercase tracking-widest mt-3 ml-1">
-                           Your membership will end on {(() => {
-                              const d = new Date(startDate);
-                              if (selectedPlan.type === 'subscription' && selectedPlan.billingCycle) {
-                                 if (selectedPlan.billingCycle === 'weekly') d.setDate(d.getDate() + 7);
-                                 else if (selectedPlan.billingCycle === 'monthly') d.setMonth(d.getMonth() + 1);
-                                 else if (selectedPlan.billingCycle === 'yearly') d.setFullYear(d.getFullYear() + 1);
-                              } else if (selectedPlan.durationWeeks) {
-                                 d.setDate(d.getDate() + (selectedPlan.durationWeeks * 7));
-                              }
-                              return d.toLocaleDateString();
-                           })()}
-                        </p>
-                     </div>
+                    <label className="text-[10px] font-black uppercase text-ink/30 ml-2 mb-2 block">4. Membership Start Date</label>
+                    <div className="bg-slate-50 p-4 rounded-3xl">
+                      <input
+                        type="date"
+                        min={new Date().toISOString().split('T')[0]}
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full bg-white rounded-xl py-3 px-4 text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      />
+                      <p className="text-[9px] font-bold text-ink/20 uppercase tracking-widest mt-3 ml-1">
+                        Your membership will end on {(() => {
+                          const d = new Date(startDate);
+                          if (selectedPlan.type === 'subscription' && selectedPlan.billingCycle) {
+                            if (selectedPlan.billingCycle === 'weekly') d.setDate(d.getDate() + 7);
+                            else if (selectedPlan.billingCycle === 'monthly') d.setMonth(d.getMonth() + 1);
+                            else if (selectedPlan.billingCycle === 'yearly') d.setFullYear(d.getFullYear() + 1);
+                          } else if (selectedPlan.durationWeeks) {
+                            d.setDate(d.getDate() + (selectedPlan.durationWeeks * 7));
+                          }
+                          return d.toLocaleDateString();
+                        })()}
+                      </p>
+                    </div>
                   </div>
 
                   {applicablePromos.length > 0 && (
@@ -938,46 +934,46 @@ export default function Pricing() {
 
                   {/* Voucher/Coupon Entry */}
                   <div className="pt-6 border-t border-slate-100/50">
-                     <label className="text-[10px] font-black uppercase text-ink/30 ml-2 mb-2 block">Gift Voucher / Promo Code</label>
-                     
-                     {appliedCoupons.length > 0 && (
-                       <div className="mb-4 space-y-2">
-                         {appliedCoupons.map((c, i) => (
-                           <div key={i} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200">
-                             <div>
-                               <span className="text-xs font-black uppercase">{c.code}</span>
-                               <span className="text-[10px] text-emerald-600 font-bold ml-2">-{currency}{c.amount}</span>
-                             </div>
-                             <button
-                               onClick={() => {
-                                 const newCoupons = [...appliedCoupons];
-                                 newCoupons.splice(i, 1);
-                                 setAppliedCoupons(newCoupons);
-                               }}
-                               className="text-red-500 text-[10px] font-bold uppercase"
-                             >Remove</button>
-                           </div>
-                         ))}
-                       </div>
-                     )}
+                    <label className="text-[10px] font-black uppercase text-ink/30 ml-2 mb-2 block">Gift Voucher / Promo Code</label>
 
-                     <div className="flex gap-2">
-                        <input 
-                           type="text"
-                           placeholder="Enter code..."
-                           value={couponInput}
-                           onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                           disabled={isValidatingCoupon}
-                           className="flex-1 rounded-2xl bg-slate-50 p-4 text-sm font-bold outline-none focus:ring-4 focus:ring-brand-blue/5 uppercase"
-                        />
-                        <button 
-                           onClick={handleApplyCoupon}
-                           disabled={!couponInput || isValidatingCoupon}
-                           className="px-6 rounded-2xl bg-ink text-white font-black text-[10px] uppercase shadow-lg disabled:opacity-30"
-                        >
-                           {isValidatingCoupon ? '...' : 'Add'}
-                        </button>
-                     </div>
+                    {appliedCoupons.length > 0 && (
+                      <div className="mb-4 space-y-2">
+                        {appliedCoupons.map((c, i) => (
+                          <div key={i} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200">
+                            <div>
+                              <span className="text-xs font-black uppercase">{c.code}</span>
+                              <span className="text-[10px] text-emerald-600 font-bold ml-2">-{currency}{c.amount}</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const newCoupons = [...appliedCoupons];
+                                newCoupons.splice(i, 1);
+                                setAppliedCoupons(newCoupons);
+                              }}
+                              className="text-red-500 text-[10px] font-bold uppercase"
+                            >Remove</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Enter code..."
+                        value={couponInput}
+                        onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                        disabled={isValidatingCoupon}
+                        className="flex-1 rounded-2xl bg-slate-50 p-4 text-sm font-bold outline-none focus:ring-4 focus:ring-brand-blue/5 uppercase"
+                      />
+                      <button
+                        onClick={handleApplyCoupon}
+                        disabled={!couponInput || isValidatingCoupon}
+                        className="px-6 rounded-2xl bg-ink text-white font-black text-[10px] uppercase shadow-lg disabled:opacity-30"
+                      >
+                        {isValidatingCoupon ? '...' : 'Add'}
+                      </button>
+                    </div>
                   </div>
 
                   {prorationCredit > 0 && (
@@ -1048,92 +1044,89 @@ export default function Pricing() {
                   )}
 
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (!selectedChildId || preferredDays.length === 0) return setError('Please complete selection.');
-                      
+
                       const user = getUser();
                       if (selectedPlan.gender && selectedPlan.gender !== 'mixed') {
-                         let pGender = '';
-                         if (selectedChildId === 'self') {
-                            pGender = user?.gender;
-                         } else {
-                            const child = children.find(c => c._id === selectedChildId);
-                            pGender = child?.gender;
-                         }
+                        let pGender = '';
+                        if (selectedChildId === 'self') {
+                          pGender = user?.gender;
+                        } else {
+                          const child = children.find(c => c._id === selectedChildId);
+                          pGender = child?.gender;
+                        }
 
-                         if (pGender && pGender !== 'other' && pGender !== selectedPlan.gender) {
-                            return setError(`This membership is exclusively for ${selectedPlan.gender}s.`);
-                         }
+                        if (pGender && pGender !== 'other' && pGender !== selectedPlan.gender) {
+                          return setError(`This membership is exclusively for ${selectedPlan.gender}s.`);
+                        }
                       }
 
-                      setError('');
-                      setCheckoutStep(2);
+                      setIsProcessing(true);
+                      try {
+                        await api.post('/memberships/validate', {
+                          planId: selectedPlan._id,
+                          childId: selectedChildId === 'self' ? null : (selectedChildId || null),
+                          preferredDays,
+                          preferredSlots,
+                          startDate,
+                          upgradeFromMembershipId: upgradeMembership?._id
+                        });
+                        setError('');
+                        setCheckoutStep(2);
+                      } catch (err) {
+                        setError(err?.response?.data?.message || 'Conflict check failed.');
+                      } finally {
+                        setIsProcessing(false);
+                      }
                     }}
-                    className="w-full rounded-2xl bg-brand-blue py-5 text-white font-black shadow-xl"
+                    disabled={isProcessing}
+                    className={`w-full rounded-2xl bg-brand-blue py-5 text-white font-black shadow-xl ${isProcessing ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
-                    Continue to Payment →
+                    {isProcessing ? 'Validating...' : 'Continue to Payment →'}
                   </button>
                 </div>
-              ) : (
+              ) : checkoutStep === 2 ? (
                 <div className="space-y-6 animate-in slide-in-from-left-4">
                   {/* Payment Method Selector */}
                   <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 flex flex-col sm:flex-row gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentType('online')}
+                      className={`flex-1 p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 ${paymentType === 'online' ? 'border-brand-blue bg-white shadow-xl' : 'border-transparent opacity-50 hover:bg-white/50'}`}
+                    >
+                      <span className="text-3xl">💳</span>
+                      <div className="text-center">
+                        <p className="text-sm font-black text-ink">Pay Online</p>
+                        <p className="text-[10px] font-bold text-ink/30 uppercase mt-1">Instant Activation</p>
+                      </div>
+                    </button>
+                    {(globalSettings.allowCenterPayment ?? true) && (
                       <button
-                         type="button"
-                         onClick={() => setPaymentType('online')}
-                         className={`flex-1 p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 ${paymentType === 'online' ? 'border-brand-blue bg-white shadow-xl' : 'border-transparent opacity-50 hover:bg-white/50'}`}
+                        type="button"
+                        onClick={() => setPaymentType('center')}
+                        className={`flex-1 p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 ${paymentType === 'center' ? 'border-brand-blue bg-white shadow-xl' : 'border-transparent opacity-50 hover:bg-white/50'}`}
                       >
-                         <span className="text-3xl">💳</span>
-                         <div className="text-center">
-                            <p className="text-sm font-black text-ink">Pay Online</p>
-                            <p className="text-[10px] font-bold text-ink/30 uppercase mt-1">Instant Activation</p>
-                         </div>
+                        <span className="text-3xl">🏢</span>
+                        <div className="text-center">
+                          <p className="text-sm font-black text-ink">Pay at Center</p>
+                          <p className="text-[10px] font-bold text-ink/30 uppercase mt-1">Cash or Card</p>
+                        </div>
                       </button>
-                      {(globalSettings.allowCenterPayment ?? true) && (
-                        <button
-                          type="button"
-                          onClick={() => setPaymentType('center')}
-                          className={`flex-1 p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 ${paymentType === 'center' ? 'border-brand-blue bg-white shadow-xl' : 'border-transparent opacity-50 hover:bg-white/50'}`}
-                        >
-                          <span className="text-3xl">🏢</span>
-                          <div className="text-center">
-                              <p className="text-sm font-black text-ink">Pay at Center</p>
-                              <p className="text-[10px] font-bold text-ink/30 uppercase mt-1">Cash or Card on-site</p>
-                          </div>
-                        </button>
-                      )}
+                    )}
                   </div>
 
-                  <div className="space-y-1">
-
-                    <label className="text-[10px] font-black uppercase text-ink/30 block mb-2">Checkout Summary</label>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-sm font-bold">
-                        <span className="text-ink/60">Gross Amount</span>
-                        <span className="text-ink font-black">
-                          {currency} {
-                            (activeTax?.calculationMethod === 'inclusive' 
-                              ? (activeTax.type === 'percentage' ? multipliedPrice / (1 + (activeTax.value / 100)) : Math.max(0, multipliedPrice - activeTax.value)) 
-                              : multipliedPrice).toFixed(2)
-                          }
-                        </span>
-                      </div>
-
-                      {membershipUnits > 1 && (
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase text-amber-600 bg-amber-50 px-3 py-2 rounded-xl">
-                          <span>Capacity Multiplier (x{membershipUnits} Units)</span>
-                          <span>Over {baseCapacity} weekly spots</span>
-                        </div>
-                      )}
-                      
+                  <div className="bg-slate-50 rounded-[32px] overflow-hidden border border-slate-100">
+                    <div className="p-6 bg-brand-blue/5 border-b border-brand-blue/10">
+                      <h4 className="text-sm font-black text-brand-blue uppercase tracking-widest mb-1">Order Summary</h4>
+                      <p className="text-xs text-brand-blue/60 font-bold">{selectedPlan.name}</p>
+                    </div>
+                    <div className="p-6">
                       <div className="flex justify-between items-center py-2">
-                        <span className="text-[9px] font-black text-ink/30 uppercase">Subtotal</span>
-                        <span className="text-sm font-black text-ink">
-                          {(activeTax?.calculationMethod === 'inclusive' 
-                              ? (activeTax.type === 'percentage' ? multipliedPrice / (1 + (activeTax.value / 100)) : Math.max(0, multipliedPrice - activeTax.value)) 
-                              : multipliedPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
-                        </span>
+                        <span className="text-[9px] font-black text-ink/40 uppercase tracking-widest">Base Price</span>
+                        <span className="text-sm font-black text-ink">{currency} {selectedPlan.price.toFixed(2)} {selectedPlan.pricingType === 'per_unit' && <span className="text-[10px] font-bold text-ink/40 uppercase">x {membershipUnits}</span>}</span>
                       </div>
+
                       {prorationCredit > 0 && (
                         <div className="flex justify-between items-center py-2">
                           <span className="text-[9px] font-black text-amber-500 uppercase">Proration Credit</span>
@@ -1146,7 +1139,7 @@ export default function Pricing() {
                           <span className="text-sm font-black text-emerald-500">- {discountAmount.toLocaleString()} {currency}</span>
                         </div>
                       )}
-                      
+
                       {appliedCoupons.map((c, i) => (
                         <div key={i} className="flex justify-between items-center mt-3 text-emerald-600 font-bold">
                           <span className="text-[10px] uppercase tracking-widest">Voucher Applied ({c.code})</span>
@@ -1156,8 +1149,8 @@ export default function Pricing() {
 
                       <div className="flex justify-between items-center text-sm font-bold border-t border-slate-200 pt-3">
                         <span className="text-ink/60">
-                           VAT ({activeTax?.value}{activeTax?.type === 'percentage' ? '%' : ` ${currency}`})
-                           {activeTax?.calculationMethod === 'inclusive' && <span className="block text-[8px] font-black uppercase text-brand-blue/40 tracking-widest">Included in price</span>}
+                          VAT ({activeTax?.value}{activeTax?.type === 'percentage' ? '%' : ` ${currency}`})
+                          {activeTax?.calculationMethod === 'inclusive' && <span className="block text-[8px] font-black uppercase text-brand-blue/40 tracking-widest">Included in price</span>}
                         </span>
                         <span className="text-ink">{currency} {currTaxValue.toFixed(2)}</span>
                       </div>
@@ -1174,45 +1167,86 @@ export default function Pricing() {
                   </div>
 
                   {paymentType === 'online' ? (
-                     <PaymentForm
-                       totalAmount={Math.round(finalTotalAmount * 100) / 100}
-                       onSubmit={handleCheckoutWithRazorpay}
-                       onCancel={() => setPaymentType('')}
-                       prefillName={getUser()?.name}
-                       prefillEmail={getUser()?.email}
-                       prefillPhone={getUser()?.phone}
-                     />
+                    <PaymentForm
+                      totalAmount={Math.round(finalTotalAmount * 100) / 100}
+                      onSubmit={handleCheckoutWithRazorpay}
+                      onCancel={() => setPaymentType('')}
+                      prefillName={getUser()?.name}
+                      prefillEmail={getUser()?.email}
+                      prefillPhone={getUser()?.phone}
+                    />
                   ) : (
-                     <form onSubmit={handleCheckout} className="space-y-4">
-                        <div className="animate-in slide-in-from-top-4 duration-500">
-                           <div className="p-8 rounded-[32px] bg-emerald-50/50 border-2 border-dashed border-emerald-200 text-center mb-6">
-                              <span className="text-4xl block mb-4">✅</span>
-                              <h4 className="text-lg font-black text-emerald-900 mb-2">Ready to Book?</h4>
-                              <p className="text-sm text-emerald-700/70 font-bold leading-relaxed">
-                                 You will pay at the reception when you visit the center. Your sessions will be held for you.
-                              </p>
-                           </div>
-                           <button 
-                             type="submit" 
-                             disabled={isProcessing}
-                             className="w-full rounded-2xl bg-brand-blue py-5 text-white font-black shadow-xl flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
-                           >
-                             {isProcessing ? (
-                                <>
-                                   <div className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin" />
-                                   <span>Processing...</span>
-                                </>
-                             ) : (
-                                <>
-                                   <span>🔒 Confirm and Book Now</span>
-                                </>
-                             )}
-                           </button>
+                    <form onSubmit={handleCheckout} className="space-y-4">
+                      <div className="animate-in slide-in-from-top-4 duration-500">
+                        <div className="p-8 rounded-[32px] bg-emerald-50/50 border-2 border-dashed border-emerald-200 text-center mb-6">
+                          <span className="text-4xl block mb-4">✅</span>
+                          <h4 className="text-lg font-black text-emerald-900 mb-2">Ready to Book?</h4>
+                          <p className="text-sm text-emerald-700/70 font-bold leading-relaxed">
+                            You will pay at the reception when you visit the center. Your sessions will be held for you.
+                          </p>
                         </div>
-                     </form>
+                        <button
+                          type="submit"
+                          disabled={isProcessing}
+                          className="w-full rounded-2xl bg-brand-blue py-5 text-white font-black shadow-xl flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                          {isProcessing ? (
+                            <>
+                              <div className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                              <span>Processing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>🔒 Confirm and Book Now</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
                   )}
                 </div>
+              ) : (
+                <div className="animate-in slide-in-from-right-4 text-center py-6">
+                  <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-5xl mx-auto mb-6 animate-bounce transition-transform">✓</div>
+                  <h3 className="font-display text-3xl font-black text-ink mb-4">Awesome!</h3>
 
+                  <div className="mb-6 space-y-4">
+                    {completedMembership?.bookingId?.bookingNumber && (
+                      <div className="bg-slate-50 p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 w-full border border-slate-100">
+                        <div className="flex flex-col items-start text-left gap-1">
+                          <p className="text-brand-blue font-black tracking-widest text-sm uppercase">
+                            Booking #: {completedMembership.bookingId.bookingNumber}
+                          </p>
+                          {completedMembership.bookingId.paymentId?.reference && (
+                            <p className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">
+                              UTR / Txn: {completedMembership.bookingId.paymentId.reference}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => window.open(`/invoice/booking/${completedMembership.bookingId._id}`, '_blank')}
+                          className="bg-white text-brand-blue px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center gap-2 border border-brand-blue/10"
+                        >
+                          <span>📄</span> Print Invoice
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-ink/60 text-base mb-8 max-w-md mx-auto">
+                    Your membership has been successfully confirmed and your schedule generated.
+                  </p>
+
+                  <button
+                    onClick={() => {
+                      closeCheckout();
+                      navigate('/dashboard');
+                    }}
+                    className="w-full rounded-2xl bg-brand-blue py-4 text-white font-black shadow-xl"
+                  >
+                    Go to Dashboard
+                  </button>
+                </div>
               )}
             </div>
           </div>

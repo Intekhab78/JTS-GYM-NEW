@@ -1422,7 +1422,7 @@ export default function BookingFlow() {
                 {paymentType === 'online' ? (
                   <PaymentForm
                     totalAmount={Math.max(0, (totalPrice - discountAmount - couponAmount) + (activeTax?.calculationMethod === 'inclusive' ? 0 : taxAmount))}
-                    onSubmit={handleCreateBooking}
+                    onSubmit={(details) => handleCreateBooking('online', details)}
                     onCancel={() => { setPaymentType(''); setStep(6); }}
                     prefillName={getUser()?.name || guestDetails?.name}
                     prefillEmail={getUser()?.email || guestDetails?.email}
@@ -1440,7 +1440,7 @@ export default function BookingFlow() {
                         <p className="text-xs text-ink/40 mt-2 font-medium text-center">Add a card • Secure and fast</p>
                       </button>
                       {(globalSettings.allowCenterPayment ?? true) && (
-                        <button onClick={handleCreateBooking} className="p-8 rounded-[40px] border-2 border-slate-50 bg-white hover:border-brand-blue hover:shadow-xl transition-all group flex flex-col items-center w-full">
+                        <button onClick={() => handleCreateBooking('center')} className="p-8 rounded-[40px] border-2 border-slate-50 bg-white hover:border-brand-blue hover:shadow-xl transition-all group flex flex-col items-center w-full">
                           <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center text-3xl mb-4 group-hover:scale-110 transition-transform">📍</div>
                           <h3 className="font-display text-xl group-hover:text-brand-blue">Pay at Center</h3>
                           <p className="text-xs text-ink/40 mt-2 font-medium text-center">Cash or Card at the gym</p>
@@ -1463,9 +1463,16 @@ export default function BookingFlow() {
                 <div className="mb-8 space-y-4">
                   {createdBookings.length > 0 && (
                     <div className="bg-slate-50 p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 max-w-md mx-auto border border-slate-100">
-                      <p className="text-brand-blue font-black tracking-widest text-sm uppercase">
-                        #{createdBookings[0]?.bookingNumber}
-                      </p>
+                      <div className="flex flex-col items-start text-left gap-1">
+                        <p className="text-brand-blue font-black tracking-widest text-sm uppercase">
+                          Booking #: {createdBookings[0]?.bookingNumber}
+                        </p>
+                        {createdBookings[0]?.paymentReference && (
+                          <p className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">
+                            UTR / Txn: {createdBookings[0].paymentReference}
+                          </p>
+                        )}
+                      </div>
                       <button
                         onClick={() => window.open(`/invoice/booking/${createdBookings[0]?._id}`, '_blank')}
                         className="bg-white text-brand-blue px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center gap-2 border border-brand-blue/10"
