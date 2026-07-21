@@ -114,19 +114,25 @@ export default function BookingFlow() {
     }
   }, [selectedPromo, totalPrice]);
 
-  // Fetch promos when summary step is reached
+  // Fetch promos as soon as class and location are known
   useEffect(() => {
-    if (step === 5 && selectedClass && selectedLocation) {
+    if (selectedClass && selectedLocation) {
       const itemId = selectedClass._id;
       const itemType = 'class';
       api.get(`/promotions/active?locationId=${selectedLocation}&itemId=${itemId}&itemType=${itemType}`)
-        .then(res => setApplicablePromos(res.data || []))
+        .then(res => {
+          const promos = res.data || [];
+          setApplicablePromos(promos);
+          if (promos.length > 0) {
+            setSelectedPromo(promos[0]);
+          }
+        })
         .catch(err => console.error("Error fetching promos:", err));
-    } else if (step < 5) {
+    } else {
       setApplicablePromos([]);
       setSelectedPromo(null);
     }
-  }, [step, selectedClass?._id, selectedLocation]);
+  }, [selectedClass?._id, selectedLocation]);
 
   // Fetch tax rule for location/class
   useEffect(() => {
@@ -447,7 +453,7 @@ export default function BookingFlow() {
     }
   };
 
-  const handleCreateBooking = async (razorpayDetails) => {
+  const handleCreateBooking = async (method, razorpayDetails = {}) => {
     setLoading(true);
     try {
       // Calculate per-session proportion of the total discount
@@ -462,7 +468,7 @@ export default function BookingFlow() {
           classId: selectedClass._id,
           locationId: selectedLocation,
           corporateName: corporateName || getUser()?.companyName || 'Corporate Booking',
-          paymentMethod: paymentType || 'center',
+          paymentMethod: method || paymentType || 'center',
           promotionId: selectedPromo?._id,
           discountAmount: discountAmount,
           appliedCoupons,
@@ -481,7 +487,7 @@ export default function BookingFlow() {
           sessionIds: selectedSessions.map(s => s._id),
           classId: selectedClass._id,
           locationId: selectedLocation,
-          paymentMethod: paymentType || 'center',
+          paymentMethod: method || paymentType || 'center',
           guestDetails: !getUser() ? guestDetails : undefined,
           promotionId: selectedPromo?._id,
           discountAmount,
@@ -716,7 +722,13 @@ export default function BookingFlow() {
             {step === 3 && selectedClass && (
               <div className="animate-rise">
                 <h2 className="font-display text-3xl font-black text-ink mb-2">Trainer & Time</h2>
-                <p className="text-ink/60 mb-8">{selectedClass.title} • {selectedClass.duration} • {currency} {selectedClass.price}</p>
+                <p className="text-ink/60 mb-8">
+                  {selectedClass.title} • {selectedClass.duration} • {selectedPromo && selectedPromo.promoType !== 'bogo' ? (
+                    <><span className="line-through opacity-50">{currency} {selectedClass.price}</span> <span className="text-red-500 font-bold">{currency} {selectedPromo.discountType === 'percentage' ? Math.round(selectedClass.price * (1 - selectedPromo.discountValue / 100)) : Math.max(0, selectedClass.price - selectedPromo.discountValue)}</span></>
+                  ) : (
+                    <>{currency} {selectedClass.price}</>
+                  )}
+                </p>
 
                 <div className="space-y-8">
                   <div>
@@ -944,7 +956,18 @@ export default function BookingFlow() {
                     </div>
                   </div>
                   <div className="md:text-right">
-                    <p className="text-2xl font-black text-ink">{currency} {selectedClass?.price || 0}</p>
+                    {selectedPromo && selectedPromo.promoType !== 'bogo' ? (
+                      <>
+                        <p className="text-sm text-slate-400 line-through font-bold">{currency} {selectedClass?.price || 0}</p>
+                        <p className="text-2xl font-black text-red-500">
+                          {currency} {selectedPromo.discountType === 'percentage' 
+                            ? Math.round((selectedClass?.price || 0) * (1 - selectedPromo.discountValue / 100)) 
+                            : Math.max(0, (selectedClass?.price || 0) - selectedPromo.discountValue)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-2xl font-black text-ink">{currency} {selectedClass?.price || 0}</p>
+                    )}
                     <p className="text-[10px] font-black uppercase tracking-widest text-ink/40 mt-1">Per Participant</p>
                   </div>
                 </div>

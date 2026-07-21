@@ -7,11 +7,14 @@ export default function PricingCard({ plan }) {
   const promo = hasPromotion ? plan.activePromotions[0] : null;
 
   return (
-    <div className={`soft-card rounded-[40px] p-8 transition-all hover:-translate-y-2 hover:shadow-2xl group border relative overflow-hidden ${hasPromotion ? 'border-coral shadow-[0_0_20px_rgba(255,83,83,0.1)]' : 'border-slate-100/50'} bg-white`}>
+    <div className={`soft-card rounded-[40px] p-8 transition-all hover:-translate-y-2 hover:shadow-2xl group border relative overflow-hidden ${hasPromotion ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.15)]' : 'border-slate-100/50'} bg-white`}>
       {hasPromotion && (
          <div className="absolute top-0 right-0 z-10">
-            <div className="bg-coral text-white text-[10px] font-black uppercase tracking-widest py-2 px-10 rotate-45 translate-x-[35%] translate-y-[20%] shadow-lg">
-               OFFER
+            <div className="bg-red-500 text-white text-[10px] font-black uppercase tracking-widest py-2 px-10 rotate-45 translate-x-[35%] translate-y-[20%] shadow-lg">
+               {promo.promoType === 'bogo' ? 'BOGO 1+1' :
+                  promo.promoType === 'flash' ? 'FLASH' :
+                    promo.promoType === 'percentage' ? `${promo.discountValue}% OFF` :
+                      'OFFER'}
             </div>
          </div>
       )}
@@ -24,7 +27,7 @@ export default function PricingCard({ plan }) {
               {currency} {plan.price}
             </span>
             {hasPromotion && promo.discountValue && (
-              <span className="text-4xl font-black text-coral mt-1">
+              <span className="text-4xl font-black text-red-500 mt-1">
                 {currency} {promo.discountType === 'percentage' 
                   ? Math.round(plan.price * (1 - promo.discountValue / 100)) 
                   : Math.max(0, plan.price - promo.discountValue)}
@@ -34,8 +37,8 @@ export default function PricingCard({ plan }) {
           <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-ink/30 italic">{plan.validity}</p>
           
           {hasPromotion && promo.name && (
-            <div className="mt-4 bg-coral/5 border border-coral/10 rounded-2xl p-3">
-              <p className="text-[10px] font-black text-coral uppercase tracking-widest text-center">{promo.name}</p>
+            <div className="mt-4 bg-red-500/5 border border-red-500/10 rounded-2xl p-3">
+              <p className="text-[10px] font-black text-red-500 uppercase tracking-widest text-center">{promo.name}</p>
             </div>
           )}
         </div>

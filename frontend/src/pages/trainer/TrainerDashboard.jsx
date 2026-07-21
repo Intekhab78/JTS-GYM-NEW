@@ -186,6 +186,37 @@ export default function TrainerDashboard() {
     syncUserProfile();
   }, []);
 
+  const overviewStats = useMemo(() => {
+    if (!sessions) return { upcoming: 0, past: 0, totalParticipants: 0, allBookings: allBookings?.length || 0 };
+    
+    let upcomingCount = 0;
+    let pastCount = 0;
+    let participantsCount = 0;
+
+    sessions.forEach(s => {
+      if (s.status === 'cancelled') return;
+
+      const sStart = new Date(s.startTime);
+      const sEnd = s.endTime ? new Date(s.endTime) : new Date(sStart.getTime() + 60 * 60000);
+      const checkInWindow = new Date(sStart.getTime() - 15 * 60000);
+      const currentEndWindow = new Date(sEnd.getTime() + 5 * 60000);
+
+      if (now < checkInWindow || (now >= checkInWindow && now <= currentEndWindow)) {
+        upcomingCount++;
+        participantsCount += (s.bookedParticipants || 0);
+      } else if (now > currentEndWindow) {
+        pastCount++;
+      }
+    });
+
+    return {
+      upcoming: upcomingCount,
+      past: pastCount,
+      totalParticipants: participantsCount,
+      allBookings: allBookings?.length || 0
+    };
+  }, [sessions, now, allBookings]);
+
   const filteredSessions = useMemo(() => {
     return sessions
       .filter(s => {
@@ -382,6 +413,53 @@ export default function TrainerDashboard() {
             </div>
           </div>
         )}
+
+        {/* Overview Statistics Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <span className="text-3xl">🚀</span>
+              <span className="bg-brand-blue/10 text-brand-blue text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Active</span>
+            </div>
+            <div>
+              <h4 className="text-4xl font-black text-ink mb-1">{overviewStats.upcoming}</h4>
+              <p className="text-[10px] font-black uppercase tracking-widest text-ink/40">Upcoming Classes</p>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <span className="text-3xl">✅</span>
+              <span className="bg-emerald-100 text-emerald-600 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Completed</span>
+            </div>
+            <div>
+              <h4 className="text-4xl font-black text-ink mb-1">{overviewStats.past}</h4>
+              <p className="text-[10px] font-black uppercase tracking-widest text-ink/40">Classes Taken</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <span className="text-3xl">👥</span>
+              <span className="bg-indigo-100 text-indigo-600 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Students</span>
+            </div>
+            <div>
+              <h4 className="text-4xl font-black text-ink mb-1">{overviewStats.totalParticipants}</h4>
+              <p className="text-[10px] font-black uppercase tracking-widest text-ink/40">Upcoming Participants</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <span className="text-3xl">🎟️</span>
+              <span className="bg-coral/10 text-coral text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Lifetime</span>
+            </div>
+            <div>
+              <h4 className="text-4xl font-black text-ink mb-1">{overviewStats.allBookings}</h4>
+              <p className="text-[10px] font-black uppercase tracking-widest text-ink/40">Total Bookings</p>
+            </div>
+          </div>
+        </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
           {activeTab === 'schedule' && (

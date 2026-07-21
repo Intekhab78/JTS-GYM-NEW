@@ -137,8 +137,12 @@ export default function Pricing() {
     const locationId = getLocationId();
     api.get(`/promotions/active?locationId=${locationId}&itemId=${plan._id}&itemType=plan`)
       .then(res => {
-        setApplicablePromos(res.data || []);
-      })
+        const promos = res.data || [];
+        setApplicablePromos(promos);
+        if (promos.length > 0) {
+          setSelectedPromo(promos[0]);
+        }
+      }).catch(() => { });
 
     // Fetch tax rule
     const fetchTax = async () => {
@@ -501,12 +505,12 @@ export default function Pricing() {
               classOptions.map((item) => (
                 <div
                   key={item._id}
-                  className={`relative overflow-hidden rounded-3xl border ${item.isFeatured ? 'border-coral/40 bg-white shadow-glow' : 'border-white/60 bg-white/80'} p-6`}
+                  className={`relative overflow-hidden rounded-3xl border ${item.isFeatured ? 'border-red-500/40 bg-white shadow-glow' : 'border-white/60 bg-white/80'} p-6`}
                 >
                   {/* Promotion Sash */}
                   {item.activePromotions?.length > 0 && (
                     <div className="absolute top-0 left-0 z-10">
-                      <div className="bg-coral text-white text-[8px] font-black uppercase tracking-widest py-1.5 px-8 -rotate-45 -translate-x-[25%] translate-y-[20%] shadow-lg">
+                      <div className="bg-red-500 text-white text-[8px] font-black uppercase tracking-widest py-1.5 px-8 -rotate-45 -translate-x-[25%] translate-y-[20%] shadow-lg">
                         {item.activePromotions[0].promoType === 'bogo' ? 'BOGO 1+1' :
                           item.activePromotions[0].promoType === 'flash' ? 'FLASH' :
                             item.activePromotions[0].promoType === 'percentage' ? `${item.activePromotions[0].discountValue}% OFF` :
@@ -535,7 +539,7 @@ export default function Pricing() {
                             <p className="text-xs font-bold text-slate-300 line-through">
                               {item.price.toLocaleString()} {currency}
                             </p>
-                            <p className="text-3xl font-black text-coral">
+                            <p className="text-3xl font-black text-red-500">
                               {Math.round(
                                 item.activePromotions[0].discountType === 'percentage'
                                   ? item.price * (1 - item.activePromotions[0].discountValue / 100)
@@ -816,7 +820,22 @@ export default function Pricing() {
               <p className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-1">
                 {checkoutStep === 1 ? 'Step 1: Scheduling' : 'Step 2: Payment'}
               </p>
-              <h3 className="text-2xl font-black">{selectedPlan.name} — {selectedPlan.price} {currency}</h3>
+              <h3 className="text-2xl font-black">
+                {selectedPlan.name} — {selectedPromo && selectedPromo.promoType !== 'bogo' ? (
+                  <>
+                    <span className="line-through opacity-50 text-xl">{selectedPlan.price}</span>
+                    <span className="text-red-300 ml-2">
+                      {Math.round(
+                        selectedPromo.discountType === 'percentage'
+                          ? selectedPlan.price * (1 - selectedPromo.discountValue / 100)
+                          : Math.max(0, selectedPlan.price - selectedPromo.discountValue)
+                      )} {currency}
+                    </span>
+                  </>
+                ) : (
+                  <>{selectedPlan.price} {currency}</>
+                )}
+              </h3>
               {checkoutStep === 2 && (
                 <button onClick={() => setCheckoutStep(1)} className="mt-4 text-[10px] font-black uppercase tracking-widest border border-white/30 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-all">← Back to scheduling</button>
               )}

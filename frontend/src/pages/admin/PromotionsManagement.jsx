@@ -165,6 +165,71 @@ export default function PromotionsManagement() {
     }));
   };
 
+  const getFilteredUniqueItems = (items, keyFn) => {
+    const filtered = formData.applicableLocations.length > 0
+      ? items.filter(item => {
+          const locId = item.locationId?._id || item.locationId || item.location?._id || item.location;
+          return formData.applicableLocations.includes(locId?.toString());
+        })
+      : items;
+
+    const seen = new Set();
+    return filtered.filter(item => {
+      const key = keyFn(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const filteredUniqueClasses = getFilteredUniqueItems(classes, c => c.title?.trim().toLowerCase());
+  const filteredUniquePlans = getFilteredUniqueItems(plans, p => p.name?.trim().toLowerCase());
+
+  const handleDownloadReport = () => {
+    const headers = ['Promotion Name', 'Type', 'Status', 'Start Date', 'End Date', 'Extended On (Date Modified)', 'Extended Until (New End Date)', 'Locations Count', 'Locations'];
+    
+    const rows = promotions.map(promo => {
+      const typeLabel = PROMO_TYPES.find(t => t.id === promo.promoType)?.label || promo.promoType;
+      const status = promo.isActive ? 'Active' : 'Inactive';
+      const startDate = new Date(promo.startDate).toLocaleDateString();
+      const endDate = new Date(promo.endDate).toLocaleDateString();
+      const extendedOnDate = promo.updatedAt && promo.updatedAt !== promo.createdAt 
+        ? new Date(promo.updatedAt).toLocaleDateString() 
+        : 'Not Extended';
+      const extendedUntilDate = promo.updatedAt && promo.updatedAt !== promo.createdAt
+        ? new Date(promo.endDate).toLocaleDateString()
+        : 'N/A';
+      const locCount = promo.applicableLocations?.length || 0;
+      
+      const locNames = (promo.applicableLocations || []).map(locId => {
+        const id = typeof locId === 'object' ? (locId._id || locId) : locId;
+        const loc = locations.find(l => l._id === id);
+        return loc ? loc.name : id;
+      }).join('; ');
+
+      return [
+        `"${promo.name}"`,
+        `"${typeLabel}"`,
+        `"${status}"`,
+        `"${startDate}"`,
+        `"${endDate}"`,
+        `"${extendedOnDate}"`,
+        `"${extendedUntilDate}"`,
+        locCount,
+        `"${locNames}"`
+      ].join(',');
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Promotions_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar />
@@ -176,11 +241,18 @@ export default function PromotionsManagement() {
         />
 
         <div className="mt-8 flex justify-between items-center">
-          <div className="flex gap-4">
-            <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm">
-               <p className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Active Campaigns</p>
-               <p className="text-2xl font-black text-brand-blue">{promotions.filter(p => p.isActive).length}</p>
+          <div className="flex gap-4 items-center">
+            <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm h-[72px] flex flex-col justify-center">
+               <p className="text-[10px] font-black text-ink/30 uppercase tracking-widest leading-none mb-1">Active Campaigns</p>
+               <p className="text-2xl font-black text-brand-blue leading-none">{promotions.filter(p => p.isActive).length}</p>
             </div>
+            <button 
+              onClick={handleDownloadReport}
+              className="bg-emerald-50 text-emerald-600 px-6 py-3 rounded-2xl font-black shadow-sm border border-emerald-100 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 h-[72px]"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Download Report
+            </button>
           </div>
           {canCreate && (
             <button 
@@ -216,11 +288,21 @@ export default function PromotionsManagement() {
               </div>
 
               <div className="space-y-4">
-                 <div className="p-4 rounded-2xl bg-slate-50/50 border border-slate-50">
-                    <p className="text-[10px] font-black text-ink/30 uppercase tracking-widest mb-1">Validity</p>
-                    <p className="text-xs font-bold text-ink">
-                      {new Date(promo.startDate).toLocaleDateString()} — {new Date(promo.endDate).toLocaleDateString()}
-                    </p>
+                 <div className="flex flex-col sm:flex-row gap-2">
+                   <div className="flex-1 p-4 rounded-2xl bg-slate-50/50 border border-slate-50">
+                      <p className="text-[10px] font-black text-ink/30 uppercase tracking-widest mb-1">Validity</p>
+                      <p className="text-xs font-bold text-ink">
+                        {new Date(promo.startDate).toLocaleDateString()} — {new Date(promo.endDate).toLocaleDateString()}
+                      </p>
+                   </div>
+                   {promo.updatedAt && promo.updatedAt !== promo.createdAt && (
+                     <div className="flex-1 p-4 rounded-2xl bg-amber-50/50 border border-amber-100 flex flex-col justify-center">
+                        <p className="text-[10px] font-black text-amber-600/60 uppercase tracking-widest mb-1">Extended On &rarr; Until</p>
+                        <p className="text-xs font-bold text-amber-700">
+                          {new Date(promo.updatedAt).toLocaleDateString()} &rarr; {new Date(promo.endDate).toLocaleDateString()}
+                        </p>
+                     </div>
+                   )}
                  </div>
 
                  <div className="flex gap-2 flex-wrap">
@@ -518,29 +600,47 @@ export default function PromotionsManagement() {
                        <div>
                           <p className="text-[10px] font-black text-ocean/40 uppercase mb-3">Classes</p>
                           <div className="flex flex-wrap gap-2 max-h-[150px] overflow-y-auto custom-scrollbar p-1">
-                             {classes.map(c => (
-                               <button
-                                 key={c._id} type="button"
-                                 onClick={() => toggleArrayItem('applicableClasses', c._id)}
-                                 className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${formData.applicableClasses.includes(c._id) ? 'bg-ocean text-white shadow-md' : 'bg-white text-ink/40 border-slate-100'}`}
-                               >
-                                 {c.title}
-                               </button>
-                             ))}
+                             {filteredUniqueClasses.map(c => {
+                                const matchingIds = classes.filter(cls => cls.title?.trim().toLowerCase() === c.title?.trim().toLowerCase()).map(cls => cls._id);
+                                const allIncluded = matchingIds.length > 0 && matchingIds.every(id => formData.applicableClasses.includes(id));
+                                return (
+                                <button
+                                  key={c._id} type="button"
+                                  onClick={() => {
+                                    if (allIncluded) {
+                                      setFormData(prev => ({...prev, applicableClasses: prev.applicableClasses.filter(id => !matchingIds.includes(id))}));
+                                    } else {
+                                      setFormData(prev => ({...prev, applicableClasses: [...new Set([...prev.applicableClasses, ...matchingIds])]}));
+                                    }
+                                  }}
+                                  className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${allIncluded ? 'bg-ocean text-white shadow-md' : 'bg-white text-ink/40 border-slate-100'}`}
+                                >
+                                  {c.title}
+                                </button>
+                              )})}
                           </div>
                        </div>
                        <div>
                           <p className="text-[10px] font-black text-indigo-400 uppercase mb-3">Membership Plans</p>
                           <div className="flex flex-wrap gap-2 max-h-[150px] overflow-y-auto custom-scrollbar p-1">
-                             {plans.map(p => (
-                               <button
-                                 key={p._id} type="button"
-                                 onClick={() => toggleArrayItem('applicablePlans', p._id)}
-                                 className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${formData.applicablePlans.includes(p._id) ? 'bg-indigo-500 text-white shadow-md' : 'bg-white text-ink/40 border-slate-100'}`}
-                               >
-                                 {p.name}
-                               </button>
-                             ))}
+                             {filteredUniquePlans.map(p => {
+                                const matchingIds = plans.filter(pl => pl.name?.trim().toLowerCase() === p.name?.trim().toLowerCase()).map(pl => pl._id);
+                                const allIncluded = matchingIds.length > 0 && matchingIds.every(id => formData.applicablePlans.includes(id));
+                                return (
+                                <button
+                                  key={p._id} type="button"
+                                  onClick={() => {
+                                    if (allIncluded) {
+                                      setFormData(prev => ({...prev, applicablePlans: prev.applicablePlans.filter(id => !matchingIds.includes(id))}));
+                                    } else {
+                                      setFormData(prev => ({...prev, applicablePlans: [...new Set([...prev.applicablePlans, ...matchingIds])]}));
+                                    }
+                                  }}
+                                  className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${allIncluded ? 'bg-indigo-500 text-white shadow-md' : 'bg-white text-ink/40 border-slate-100'}`}
+                                >
+                                  {p.name}
+                                </button>
+                              )})}
                           </div>
                        </div>
                     </div>
