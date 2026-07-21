@@ -2,15 +2,22 @@ import Razorpay from 'razorpay';
 import asyncHandler from 'express-async-handler';
 import crypto from 'crypto';
 import Payment from '../models/Payment.js';
+import Setting from '../models/Setting.js';
 
 let razorpayInstance = null;
 
-const getRazorpayInstance = () => {
-  const key_id = process.env.RAZORPAY_KEY_ID;
-  const key_secret = process.env.RAZORPAY_KEY_SECRET;
+const getRazorpayInstance = async () => {
+  let key_id = process.env.RAZORPAY_KEY_ID;
+  let key_secret = process.env.RAZORPAY_KEY_SECRET;
+
+  const razorpaySetting = await Setting.findOne({ key: 'razorpay_settings' });
+  if (razorpaySetting && razorpaySetting.value) {
+    if (razorpaySetting.value.keyId) key_id = razorpaySetting.value.keyId;
+    if (razorpaySetting.value.keySecret) key_secret = razorpaySetting.value.keySecret;
+  }
   
   if (!key_id || !key_secret) {
-    throw new Error('Razorpay API keys are not configured in environment variables');
+    throw new Error('Razorpay API keys are not configured in environment variables or database settings');
   }
   
   if (!razorpayInstance || razorpayInstance.key_id !== key_id || razorpayInstance.key_secret !== key_secret) {
@@ -32,7 +39,7 @@ export const createOrder = asyncHandler(async (req, res) => {
     throw new Error('Amount is required');
   }
 
-  const razorpay = getRazorpayInstance();
+  const razorpay = await getRazorpayInstance();
   
   // Razorpay expects amount in paise (smallest currency unit, e.g. 100 paise = 1 INR)
   const options = {
@@ -61,7 +68,9 @@ export const createOrder = asyncHandler(async (req, res) => {
 // @route   GET /api/payments/razorpay/key
 // @access  Public
 export const getRazorpayKey = asyncHandler(async (req, res) => {
-  const keyId = process.env.RAZORPAY_KEY_ID;
+  const razorpaySetting = await Setting.findOne({ key: 'razorpay_settings' });
+  let keyId = razorpaySetting?.value?.keyId || process.env.RAZORPAY_KEY_ID;
+
   if (!keyId) {
     res.status(400);
     throw new Error('Razorpay Key ID is not configured');
@@ -70,8 +79,10 @@ export const getRazorpayKey = asyncHandler(async (req, res) => {
 });
 
 // Verify signature function for backend use
-export const verifySignature = (orderId, paymentId, signature) => {
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+export const verifySignature = async (orderId, paymentId, signature) => {
+  const razorpaySetting = await Setting.findOne({ key: 'razorpay_settings' });
+  let keySecret = razorpaySetting?.value?.keySecret || process.env.RAZORPAY_KEY_SECRET;
+
   if (!keySecret) {
     throw new Error('Razorpay Secret Key is not configured');
   }
@@ -88,7 +99,14 @@ export const verifySignature = (orderId, paymentId, signature) => {
 // @route   POST /api/payments/razorpay/webhook
 // @access  Public
 export const handleWebhook = asyncHandler(async (req, res) => {
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  const razorpaySetting = await Setting.findOne({ key: 'razorpay_settings' });
+  let webhookSecret = razorpaySetting?.value?.webhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    res.status(400);
+    throw new Error('Razorpay Webhook Secret is not configured');
+  }
+
   const signature = req.headers['x-razorpay-signature'];
   
   if (!signature) {

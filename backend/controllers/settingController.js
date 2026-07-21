@@ -36,7 +36,19 @@ export const updateCounter = asyncHandler(async (req, res) => {
 // @access  Public (filtered) or Private/Admin
 export const getGlobalSettings = asyncHandler(async (req, res) => {
   const settings = await Setting.find({});
-  res.json(settings);
+  const processedSettings = settings.map(setting => {
+    const settingObj = setting.toObject();
+    if (settingObj.key === 'razorpay_settings' && settingObj.value) {
+      if (settingObj.value.keySecret) {
+        settingObj.value.keySecret = '••••••••••••••••';
+      }
+      if (settingObj.value.webhookSecret) {
+        settingObj.value.webhookSecret = '••••••••••••••••';
+      }
+    }
+    return settingObj;
+  });
+  res.json(processedSettings);
 });
 
 // @desc    Update a global setting
@@ -44,13 +56,35 @@ export const getGlobalSettings = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 export const updateGlobalSetting = asyncHandler(async (req, res) => {
   const { key } = req.params;
-  const { value, description } = req.body;
+  let { value, description } = req.body;
+
+  if (key === 'razorpay_settings') {
+    const existing = await Setting.findOne({ key });
+    if (existing && existing.value) {
+      const mergedValue = { ...value };
+      if (value.keySecret === '••••••••••••••••') {
+        mergedValue.keySecret = existing.value.keySecret;
+      }
+      if (value.webhookSecret === '••••••••••••••••') {
+        mergedValue.webhookSecret = existing.value.webhookSecret;
+      }
+      value = mergedValue;
+    }
+  }
 
   const setting = await Setting.findOneAndUpdate(
     { key },
     { $set: { value, description } },
     { new: true, upsert: true }
   );
+
+  // Send back the response with masked keys to be safe
+  if (key === 'razorpay_settings' && setting.value) {
+    const masked = setting.toObject();
+    if (masked.value.keySecret) masked.value.keySecret = '••••••••••••••••';
+    if (masked.value.webhookSecret) masked.value.webhookSecret = '••••••••••••••••';
+    return res.json(masked);
+  }
 
   res.json(setting);
 });

@@ -271,7 +271,7 @@ export const createPayment = asyncHandler(async (req, res) => {
       throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
     }
 
-    const isValid = verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    const isValid = await verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
     if (!isValid) {
       res.status(400);
       throw new Error('Payment signature verification failed. Transaction was not verified.');
@@ -348,7 +348,7 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
       throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
     }
 
-    const isValid = verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    const isValid = await verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
     if (!isValid) {
       res.status(400);
       throw new Error('Payment signature verification failed. Transaction was not verified.');
