@@ -114,19 +114,25 @@ export default function BookingFlow() {
     }
   }, [selectedPromo, totalPrice]);
 
-  // Fetch promos when summary step is reached
+  // Fetch promos as soon as class and location are known
   useEffect(() => {
-    if (step === 5 && selectedClass && selectedLocation) {
+    if (selectedClass && selectedLocation) {
       const itemId = selectedClass._id;
       const itemType = 'class';
       api.get(`/promotions/active?locationId=${selectedLocation}&itemId=${itemId}&itemType=${itemType}`)
-        .then(res => setApplicablePromos(res.data || []))
+        .then(res => {
+          const promos = res.data || [];
+          setApplicablePromos(promos);
+          if (promos.length > 0) {
+            setSelectedPromo(promos[0]);
+          }
+        })
         .catch(err => console.error("Error fetching promos:", err));
-    } else if (step < 5) {
+    } else {
       setApplicablePromos([]);
       setSelectedPromo(null);
     }
-  }, [step, selectedClass?._id, selectedLocation]);
+  }, [selectedClass?._id, selectedLocation]);
 
   // Fetch tax rule for location/class
   useEffect(() => {
@@ -447,7 +453,7 @@ export default function BookingFlow() {
     }
   };
 
-  const handleCreateBooking = async (razorpayDetails) => {
+  const handleCreateBooking = async (method, razorpayDetails = {}) => {
     setLoading(true);
     try {
       // Calculate per-session proportion of the total discount
@@ -462,7 +468,7 @@ export default function BookingFlow() {
           classId: selectedClass._id,
           locationId: selectedLocation,
           corporateName: corporateName || getUser()?.companyName || 'Corporate Booking',
-          paymentMethod: paymentType || 'center',
+          paymentMethod: method || paymentType || 'center',
           promotionId: selectedPromo?._id,
           discountAmount: discountAmount,
           appliedCoupons,
@@ -481,7 +487,7 @@ export default function BookingFlow() {
           sessionIds: selectedSessions.map(s => s._id),
           classId: selectedClass._id,
           locationId: selectedLocation,
-          paymentMethod: paymentType || 'center',
+          paymentMethod: method || paymentType || 'center',
           guestDetails: !getUser() ? guestDetails : undefined,
           promotionId: selectedPromo?._id,
           discountAmount,
@@ -716,7 +722,13 @@ export default function BookingFlow() {
             {step === 3 && selectedClass && (
               <div className="animate-rise">
                 <h2 className="font-display text-3xl font-black text-ink mb-2">Trainer & Time</h2>
-                <p className="text-ink/60 mb-8">{selectedClass.title} • {selectedClass.duration} • {currency} {selectedClass.price}</p>
+                <p className="text-ink/60 mb-8">
+                  {selectedClass.title} • {selectedClass.duration} • {selectedPromo && selectedPromo.promoType !== 'bogo' ? (
+                    <><span className="line-through opacity-50">{currency} {selectedClass.price}</span> <span className="text-red-500 font-bold">{currency} {selectedPromo.discountType === 'percentage' ? Math.round(selectedClass.price * (1 - selectedPromo.discountValue / 100)) : Math.max(0, selectedClass.price - selectedPromo.discountValue)}</span></>
+                  ) : (
+                    <>{currency} {selectedClass.price}</>
+                  )}
+                </p>
 
                 <div className="space-y-8">
                   <div>
@@ -944,7 +956,18 @@ export default function BookingFlow() {
                     </div>
                   </div>
                   <div className="md:text-right">
-                    <p className="text-2xl font-black text-ink">{currency} {selectedClass?.price || 0}</p>
+                    {selectedPromo && selectedPromo.promoType !== 'bogo' ? (
+                      <>
+                        <p className="text-sm text-slate-400 line-through font-bold">{currency} {selectedClass?.price || 0}</p>
+                        <p className="text-2xl font-black text-red-500">
+                          {currency} {selectedPromo.discountType === 'percentage' 
+                            ? Math.round((selectedClass?.price || 0) * (1 - selectedPromo.discountValue / 100)) 
+                            : Math.max(0, (selectedClass?.price || 0) - selectedPromo.discountValue)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-2xl font-black text-ink">{currency} {selectedClass?.price || 0}</p>
+                    )}
                     <p className="text-[10px] font-black uppercase tracking-widest text-ink/40 mt-1">Per Participant</p>
                   </div>
                 </div>
@@ -1422,7 +1445,7 @@ export default function BookingFlow() {
                 {paymentType === 'online' ? (
                   <PaymentForm
                     totalAmount={Math.max(0, (totalPrice - discountAmount - couponAmount) + (activeTax?.calculationMethod === 'inclusive' ? 0 : taxAmount))}
-                    onSubmit={handleCreateBooking}
+                    onSubmit={(details) => handleCreateBooking('online', details)}
                     onCancel={() => { setPaymentType(''); setStep(6); }}
                     prefillName={getUser()?.name || guestDetails?.name}
                     prefillEmail={getUser()?.email || guestDetails?.email}
@@ -1440,7 +1463,7 @@ export default function BookingFlow() {
                         <p className="text-xs text-ink/40 mt-2 font-medium text-center">Add a card • Secure and fast</p>
                       </button>
                       {(globalSettings.allowCenterPayment ?? true) && (
-                        <button onClick={handleCreateBooking} className="p-8 rounded-[40px] border-2 border-slate-50 bg-white hover:border-brand-blue hover:shadow-xl transition-all group flex flex-col items-center w-full">
+                        <button onClick={() => handleCreateBooking('center')} className="p-8 rounded-[40px] border-2 border-slate-50 bg-white hover:border-brand-blue hover:shadow-xl transition-all group flex flex-col items-center w-full">
                           <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center text-3xl mb-4 group-hover:scale-110 transition-transform">📍</div>
                           <h3 className="font-display text-xl group-hover:text-brand-blue">Pay at Center</h3>
                           <p className="text-xs text-ink/40 mt-2 font-medium text-center">Cash or Card at the gym</p>
@@ -1463,9 +1486,16 @@ export default function BookingFlow() {
                 <div className="mb-8 space-y-4">
                   {createdBookings.length > 0 && (
                     <div className="bg-slate-50 p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 max-w-md mx-auto border border-slate-100">
-                      <p className="text-brand-blue font-black tracking-widest text-sm uppercase">
-                        #{createdBookings[0]?.bookingNumber}
-                      </p>
+                      <div className="flex flex-col items-start text-left gap-1">
+                        <p className="text-brand-blue font-black tracking-widest text-sm uppercase">
+                          Booking #: {createdBookings[0]?.bookingNumber}
+                        </p>
+                        {createdBookings[0]?.paymentReference && (
+                          <p className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">
+                            UTR / Txn: {createdBookings[0].paymentReference}
+                          </p>
+                        )}
+                      </div>
                       <button
                         onClick={() => window.open(`/invoice/booking/${createdBookings[0]?._id}`, '_blank')}
                         className="bg-white text-brand-blue px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center gap-2 border border-brand-blue/10"

@@ -4,8 +4,10 @@ import Navbar from '../../components/Navbar.jsx';
 import Footer from '../../components/Footer.jsx';
 import api from '../../api/api.js';
 import { usePermissions } from '../../hooks/usePermissions.js';
+import { useSettings } from '../../context/SettingsContext.jsx';
 import toast from 'react-hot-toast';
 import AdminHeader from '../../components/AdminHeader.jsx';
+import BookingDenominationModal from '../../components/BookingDenominationModal.jsx';
 
 export default function BookingManagement() {
   const [bookings, setBookings] = useState([]);
@@ -93,7 +95,7 @@ export default function BookingManagement() {
   // Payment Confirmation Modal State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmingBookingId, setConfirmingBookingId] = useState('');
-  const [selectedMethod, setSelectedMethod] = useState('cash');
+  const [selectedMethod, setSelectedMethod] = useState([]);
   const [paymentRef, setPaymentRef] = useState('');
 
   // Filter States
@@ -164,8 +166,8 @@ export default function BookingManagement() {
       result = result.filter(b => {
         const scheduleDate = b.sessionId?.startTime || b.date;
         const bookingDate = b.createdAt;
-        return (scheduleDate && scheduleDate.startsWith(dateFilter)) || 
-               (bookingDate && bookingDate.startsWith(dateFilter));
+        return (scheduleDate && scheduleDate.startsWith(dateFilter)) ||
+          (bookingDate && bookingDate.startsWith(dateFilter));
       });
     }
 
@@ -229,19 +231,20 @@ export default function BookingManagement() {
       return;
     }
     setConfirmingBookingId(bookingId);
-    setSelectedMethod('cash');
+    setSelectedMethod([]);
     setPaymentRef('');
     setRescueMissed(false);
     setShowConfirmModal(true);
   };
 
-  const performConfirmCenterPayment = async () => {
+  const performConfirmCenterPayment = async (splitDetails) => {
     setIsRefreshing(true);
     try {
       await api.put(`/bookings/${confirmingBookingId}/status`, {
         status: 'confirmed',
-        paymentMethod: selectedMethod,
+        paymentMethod: selectedMethod.length > 1 ? 'split' : (selectedMethod[0] || 'center'),
         reference: paymentRef,
+        splitDetails,
         rescueMissed
       });
       setShowConfirmModal(false);
@@ -346,8 +349,8 @@ export default function BookingManagement() {
     <div className="min-h-screen bg-slate-50/50">
       <Navbar />
       <main className="page-shell py-12">
-        <AdminHeader 
-          title="Booking Management" 
+        <AdminHeader
+          title="Booking Management"
           description="Manage and monitor all client registrations."
           backTo={`/${roleSlug}`}
         />
@@ -516,7 +519,7 @@ export default function BookingManagement() {
                         <span className="opacity-50">📅 Schedule:</span>
                         {new Date(booking.sessionId?.startTime || booking.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
-                      <button 
+                      <button
                         onClick={() => setDateFilter(booking.createdAt.split('T')[0])}
                         className="text-[10px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full tracking-widest flex items-center gap-1.5 hover:bg-indigo-100 transition-colors"
                       >
@@ -585,7 +588,7 @@ export default function BookingManagement() {
                       onClick={() => setViewingBookingDetails(booking)}
                       className="px-5 py-2.5 bg-slate-50 text-brand-blue text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-brand-blue hover:text-white transition-all border border-slate-100 shadow-sm flex items-center gap-2 group"
                     >
-                      <span className="group-hover:scale-110 transition-transform">🔍</span> 
+                      <span className="group-hover:scale-110 transition-transform">🔍</span>
                       <span>View Full Details</span>
                     </button>
                     {booking.sessionId?.startTime && (
@@ -733,7 +736,7 @@ export default function BookingManagement() {
 
         {!loading && totalPages > 1 && (
           <div className="flex justify-center items-center mt-8 gap-4">
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
               className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-ink hover:bg-slate-50 disabled:opacity-50 transition-all"
@@ -743,7 +746,7 @@ export default function BookingManagement() {
             <span className="text-xs font-bold text-ink/50">
               Page {currentPage} of {totalPages}
             </span>
-            <button 
+            <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
               className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-ink hover:bg-slate-50 disabled:opacity-50 transition-all"
@@ -1224,12 +1227,12 @@ const StatCard = ({ label, value, icon, color, loading, onClick, isActive }) => 
     coral: 'bg-coral/5 text-coral border-coral/10'
   };
 
-  const activeStyles = isActive 
-    ? 'ring-4 ring-brand-blue/20 border-brand-blue/30 shadow-lg scale-[1.02]' 
+  const activeStyles = isActive
+    ? 'ring-4 ring-brand-blue/20 border-brand-blue/30 shadow-lg scale-[1.02]'
     : 'hover:shadow-md hover:scale-[1.02] border-slate-100';
 
   return (
-    <div 
+    <div
       onClick={onClick}
       className={`soft-card rounded-[32px] p-5 flex flex-col items-center justify-center text-center transition-all border bg-white cursor-pointer ${activeStyles} ${loading ? 'animate-pulse opacity-60' : ''}`}
     >
@@ -1246,6 +1249,52 @@ const StatCard = ({ label, value, icon, color, loading, onClick, isActive }) => 
 
 // Payment Confirmation Modal Component
 const PaymentModal = ({ show, onClose, onConfirm, method, setMethod, reference, setReference, confirmingBookingId, bookings, rescueMissed, setRescueMissed }) => {
+  const { currency, globalSettings } = useSettings();
+  const booking = bookings.find(b => b._id === confirmingBookingId);
+  const amountToPay = booking?.totalAmount || 0;
+
+  const [enabledCardBrands, setEnabledCardBrands] = useState([]);
+
+  const [cashReceived, setCashReceived] = useState('');
+  const [splitAmounts, setSplitAmounts] = useState({ cash: '' });
+  const [receivedDenominations, setReceivedDenominations] = useState({});
+  const [changeDenominations, setChangeDenominations] = useState({});
+  const [isDenominationModalOpen, setIsDenominationModalOpen] = useState(false);
+  const [cardPayments, setCardPayments] = useState([{ brand: '', amount: '' }]);
+
+  // Fetch location-specific payment settings for cards
+  useEffect(() => {
+    if (show) {
+      const locId = booking?.locationId?._id || booking?.locationId;
+      if (locId) {
+        api.get(`/locations/${locId}`).then(res => {
+          const settings = res.data?.data?.paymentSettings || res.data?.paymentSettings;
+          if (settings?.card) {
+            const brands = Object.entries(settings.card).filter(([k, v]) => v && k !== 'other').map(([k]) => k);
+            setEnabledCardBrands(brands);
+          } else {
+            // Fallback to generic defaults if no location settings configured
+            setEnabledCardBrands(['visa', 'mastercard', 'amex']);
+          }
+        }).catch(err => console.error("Failed to fetch location settings", err));
+      } else {
+        // Fallback if no locationId
+        setEnabledCardBrands(['visa', 'mastercard', 'amex']);
+      }
+    }
+  }, [show, booking]);
+
+  // Reset local state when modal closes/opens
+  useEffect(() => {
+    if (show) {
+      setCashReceived('');
+      setSplitAmounts({ cash: '' });
+      setReceivedDenominations({});
+      setChangeDenominations({});
+      setCardPayments([{ brand: '', amount: '' }]);
+    }
+  }, [show, confirmingBookingId]);
+
   if (!show) return null;
 
   const methods = [
@@ -1254,90 +1303,286 @@ const PaymentModal = ({ show, onClose, onConfirm, method, setMethod, reference, 
     { id: 'online', label: 'Manual Online Transfer', icon: '🌐' }
   ];
 
+  const handleConfirm = () => {
+    let splitDetails = [];
+    if (method.includes('cash') && splitAmounts.cash) {
+      splitDetails.push({ method: 'cash', amount: Number(splitAmounts.cash) });
+    }
+    if (method.includes('card')) {
+      const validCards = cardPayments.filter(cp => cp.brand && cp.amount).map(cp => ({ method: cp.brand, amount: Number(cp.amount) }));
+      splitDetails = [...splitDetails, ...validCards];
+    }
+    onConfirm(splitDetails.length > 0 ? splitDetails : undefined);
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-[32px] w-full max-w-md p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-brand-blue/10 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">💰</div>
-          <h2 className="font-display text-2xl font-black text-ink">Confirm Payment</h2>
-          <p className="text-sm text-ink/40 font-medium mt-2">How was the payment received at the center?</p>
-          {show && confirmingBookingId && (
-            <div className="mt-4 inline-block px-4 py-2 rounded-2xl bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold">
-              Session Date: {new Date(bookings.find(b => b._id === confirmingBookingId)?.sessionId?.startTime || bookings.find(b => b._id === confirmingBookingId)?.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+    <>
+      <div className="fixed inset-0 z-[100] overflow-y-auto bg-ink/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="min-h-full flex items-center justify-center p-4 py-12">
+          <div className="bg-white rounded-[32px] w-full max-w-md p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-brand-blue/10 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">💰</div>
+            <h2 className="font-display text-2xl font-black text-ink">Confirm Payment</h2>
+            <p className="text-sm text-ink/40 font-medium mt-2">How was the payment received at the center?</p>
+            {show && booking && (
+              <div className="mt-4 inline-block px-4 py-2 rounded-2xl bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold">
+                Session Date: {new Date(booking.sessionId?.startTime || booking.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3 mb-8">
+            {methods.map(m => (
+              <button
+                key={m.id}
+                onClick={() => {
+                  const newMethod = method.includes(m.id) ? method.filter(id => id !== m.id) : [...method, m.id];
+                  setMethod(newMethod);
+                  if (m.id === 'cash' && !method.includes('cash') && !cashReceived) {
+                    setIsDenominationModalOpen(true);
+                  }
+                  if (m.id === 'cash' && method.includes('cash')) {
+                    setCashReceived('');
+                    setSplitAmounts({ cash: '' });
+                  }
+                }}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${method.includes(m.id) ? 'border-brand-blue bg-brand-blue/5 text-brand-blue' : 'border-slate-100 bg-white hover:border-brand-blue/20'}`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{m.icon}</span>
+                  <span className="text-sm font-bold">{m.label}</span>
+                </div>
+                {method.includes(m.id) && (
+                  <div className="w-5 h-5 bg-brand-blue text-white rounded-full flex items-center justify-center text-[10px]">✓</div>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {(method.length > 1 || method.includes('card')) ? (
+            <div className="mb-8 p-5 bg-slate-50 rounded-[24px] border border-slate-200 space-y-4">
+              <p className="text-xs font-black text-ink/40 uppercase tracking-widest px-1">Allocate Amounts</p>
+
+              {method.includes('cash') && (
+                <div>
+                  <label className="block text-[10px] font-black text-ink/30 uppercase tracking-[0.2em] mb-2 px-1">Cash Portion ({currency})</label>
+                  <input
+                    type="number"
+                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-emerald-600 focus:border-brand-blue outline-none"
+                    placeholder="0"
+                    value={splitAmounts.cash}
+                    onChange={(e) => setSplitAmounts({ ...splitAmounts, cash: e.target.value })}
+                    onBlur={() => {
+                      if (Number(splitAmounts.cash) > 0) {
+                        setIsDenominationModalOpen(true);
+                      }
+                    }}
+                  />
+
+                  {Number(cashReceived) > 0 && (
+                    <div className="mt-4 bg-white border border-slate-200 rounded-xl p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                      onClick={() => setIsDenominationModalOpen(true)}
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">Received</span>
+                        <span className="text-sm font-black text-emerald-500">{currency} {Number(cashReceived).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">Change Due</span>
+                        <span className={`text-sm font-black ${(Number(cashReceived) - Number(splitAmounts.cash)) >= 0 ? 'text-brand-blue' : 'text-rose-500'}`}>
+                          {currency} {Math.max(0, Number(cashReceived) - Number(splitAmounts.cash)).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {method.includes('card') && (
+                <div>
+                  <label className="block text-[10px] font-black text-ink/30 uppercase tracking-[0.2em] mb-2 px-1">Card Portions ({currency})</label>
+                  <div className="space-y-4">
+                    {cardPayments.map((cp, idx) => (
+                      <div key={idx} className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+                        <div className="flex gap-3">
+                          <select
+                            className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-ink focus:border-brand-blue outline-none appearance-none"
+                            value={cp.brand}
+                            onChange={(e) => {
+                              const newCp = [...cardPayments];
+                              newCp[idx].brand = e.target.value;
+                              setCardPayments(newCp);
+                            }}
+                          >
+                            <option value="" disabled>Select Card...</option>
+                            {enabledCardBrands.map(b => (
+                              <option key={b} value={b}>{b.replace(/_/g, ' ').toUpperCase()}</option>
+                            ))}
+                            <option value="other">OTHER</option>
+                          </select>
+
+                          <input
+                            type="number"
+                            className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-ink focus:border-brand-blue outline-none"
+                            placeholder="Amount"
+                            value={cp.amount}
+                            onChange={(e) => {
+                              const newCp = [...cardPayments];
+                              newCp[idx].amount = e.target.value;
+                              setCardPayments(newCp);
+                            }}
+                          />
+
+                          {cardPayments.length > 1 && (
+                            <button
+                              onClick={() => setCardPayments(cardPayments.filter((_, i) => i !== idx))}
+                              className="w-12 flex items-center justify-center text-ink/40 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all border border-transparent hover:border-rose-100"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={() => setCardPayments([...cardPayments, { brand: '', amount: '' }])}
+                      className="w-full py-3 rounded-2xl border border-dashed border-slate-300 text-[10px] font-black text-brand-blue hover:bg-brand-blue/5 hover:border-brand-blue/30 uppercase tracking-widest transition-all"
+                    >
+                      + Add Another Card Split
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4">
+                <label className="block text-[10px] font-black text-ink/30 uppercase tracking-[0.2em] mb-2 px-2">
+                  Transaction Number / Code (Required if card/online)
+                </label>
+                <input
+                  type="text"
+                  className="w-full bg-white border border-slate-200 rounded-2xl py-3 px-4 text-xs font-bold text-ink focus:border-brand-blue/20 outline-none transition-all"
+                  placeholder="Enter Transaction ID or Auth Code..."
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                />
+              </div>
+            </div>
+          ) : method.includes('cash') ? (
+            <div className="mb-8 p-5 bg-slate-50 rounded-[24px] border border-slate-200">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-xs font-black text-ink/40 uppercase tracking-widest">Total Required</span>
+                <span className="text-lg font-black text-ink">{currency} {amountToPay.toFixed(2)}</span>
+              </div>
+
+              {Number(cashReceived) > 0 ? (
+                <div
+                  onClick={() => setIsDenominationModalOpen(true)}
+                  className="bg-white border-2 border-brand-blue/20 rounded-2xl p-4 cursor-pointer hover:border-brand-blue/40 transition-colors"
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">Received</span>
+                    <span className="text-sm font-black text-emerald-500">{currency} {Number(cashReceived).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-ink/40 uppercase tracking-widest">Change Due</span>
+                    <span className={`text-sm font-black ${(Number(cashReceived) - amountToPay) >= 0 ? 'text-brand-blue' : 'text-rose-500'}`}>
+                      {currency} {Math.max(0, Number(cashReceived) - amountToPay).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="mt-3 text-center">
+                    <span className="text-[10px] font-black text-brand-blue uppercase tracking-[0.2em]">Click to Edit Cash</span>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsDenominationModalOpen(true)}
+                  className="w-full bg-white border-2 border-dashed border-slate-300 rounded-2xl p-4 text-sm font-bold text-ink/60 hover:text-brand-blue hover:border-brand-blue/50 transition-colors uppercase tracking-widest"
+                >
+                  Enter Cash Received
+                </button>
+              )}
+
+              {Number(cashReceived) > 0 && Number(cashReceived) < amountToPay && (
+                <p className="mt-3 text-[10px] font-bold text-rose-500 text-center">Insufficient cash received!</p>
+              )}
+            </div>
+          ) : method.length > 0 ? (
+            <div className="mb-8">
+              <label className="block text-[10px] font-black text-ink/30 uppercase tracking-[0.2em] mb-2 px-2">
+                Transaction Number / Code (Required)
+              </label>
+              <input
+                type="text"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-xs font-bold text-ink focus:border-brand-blue/20 outline-none transition-all"
+                placeholder="Enter Transaction ID or Auth Code..."
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+              />
+            </div>
+          ) : null}
+
+          {booking?.bookingType === 'package' && (
+            <div className="mb-8 p-4 bg-emerald-50 rounded-[24px] border border-emerald-100 animate-in slide-in-from-bottom-2 duration-300">
+              <label className="flex items-center justify-between cursor-pointer group">
+                <div className="pr-4">
+                  <p className="text-xs font-black text-emerald-800 uppercase tracking-tight">Rescue Missed Classes</p>
+                  <p className="text-[10px] text-emerald-600/70 font-medium leading-relaxed mt-1">
+                    Reschedule sessions missed while payment was pending to future dates.
+                  </p>
+                </div>
+                <div className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={rescueMissed}
+                    onChange={(e) => setRescueMissed(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                </div>
+              </label>
             </div>
           )}
-        </div>
 
-        <div className="space-y-3 mb-8">
-          {methods.map(m => (
+          <div className="flex flex-col gap-3">
             <button
-              key={m.id}
-              onClick={() => setMethod(m.id)}
-              className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${method === m.id ? 'border-brand-blue bg-brand-blue/5 text-brand-blue' : 'border-slate-100 bg-white hover:border-brand-blue/20'
-                }`}
+              onClick={handleConfirm}
+              disabled={
+                method.length === 0 ||
+                (method.length === 1 && method.includes('cash') && (Number(cashReceived) <= 0 || Number(cashReceived) < amountToPay)) ||
+                (method.includes('card') && !reference) ||
+                (method.includes('online') && !reference) ||
+                ((method.includes('card') || method.length > 1) && (Number(splitAmounts.cash || 0) + cardPayments.reduce((sum, cp) => sum + (Number(cp.amount) || 0), 0) < amountToPay))
+              }
+              className="w-full bg-brand-blue text-white py-4 rounded-2xl font-black shadow-lg shadow-brand-blue/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{m.icon}</span>
-                <span className="text-sm font-bold">{m.label}</span>
-              </div>
-              {method === m.id && (
-                <div className="w-5 h-5 bg-brand-blue text-white rounded-full flex items-center justify-center text-[10px]">✓</div>
-              )}
+              Confirm & Complete Booking
             </button>
-          ))}
-        </div>
-
-        <div className="mb-8">
-          <label className="block text-[10px] font-black text-ink/30 uppercase tracking-[0.2em] mb-2 px-2">
-            {method === 'cash' ? 'Optional Reference / Note' : 'Transaction Number / Code (Required)'}
-          </label>
-          <input
-            type="text"
-            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-xs font-bold text-ink focus:border-brand-blue/20 outline-none transition-all"
-            placeholder={method === 'cash' ? 'e.g. Received at reception' : 'Enter Transaction ID or Auth Code...'}
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-          />
-        </div>
-
-        {bookings.find(b => b._id === confirmingBookingId)?.bookingType === 'package' && (
-          <div className="mb-8 p-4 bg-emerald-50 rounded-[24px] border border-emerald-100 animate-in slide-in-from-bottom-2 duration-300">
-            <label className="flex items-center justify-between cursor-pointer group">
-              <div className="pr-4">
-                <p className="text-xs font-black text-emerald-800 uppercase tracking-tight">Rescue Missed Classes</p>
-                <p className="text-[10px] text-emerald-600/70 font-medium leading-relaxed mt-1">
-                  Reschedule sessions missed while payment was pending to future dates.
-                </p>
-              </div>
-              <div className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={rescueMissed}
-                  onChange={(e) => setRescueMissed(e.target.checked)}
-                />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-              </div>
-            </label>
+            <button
+              onClick={onClose}
+              className="w-full bg-white text-ink/40 py-4 rounded-2xl font-black hover:bg-slate-50 transition-all text-xs uppercase tracking-widest"
+            >
+              Go Back
+            </button>
           </div>
-        )}
-
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={onConfirm}
-            className="w-full bg-brand-blue text-white py-4 rounded-2xl font-black shadow-lg shadow-brand-blue/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
-          >
-            Confirm & Complete Booking
-          </button>
-          <button
-            onClick={onClose}
-            className="w-full bg-white text-ink/40 py-4 rounded-2xl font-black hover:bg-slate-50 transition-all text-xs uppercase tracking-widest"
-          >
-            Go Back
-          </button>
         </div>
       </div>
     </div>
+
+    <BookingDenominationModal
+        isOpen={isDenominationModalOpen}
+        onClose={() => setIsDenominationModalOpen(false)}
+        initialReceived={receivedDenominations}
+        initialChange={changeDenominations}
+        amountToPay={amountToPay}
+        onConfirm={(received, change) => {
+          setReceivedDenominations(received);
+          setChangeDenominations(change);
+          const totalReceived = Object.entries(received).reduce((sum, [val, count]) => sum + (Number(val) * (Number(count) || 0)), 0);
+          setCashReceived(totalReceived.toString());
+        }}
+      />
+    </>
   );
 };
 

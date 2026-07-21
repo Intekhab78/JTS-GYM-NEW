@@ -344,6 +344,99 @@ export const getAllMemberships = asyncHandler(async (req, res) => {
 
   res.json(enriched);
 });
+export const validateMembership = asyncHandler(async (req, res) => {
+  const {
+    planId,
+    childId,
+    preferredDays,
+    preferredSlots,
+    startDate: reqStartDate,
+    upgradeFromMembershipId
+  } = req.body;
+
+  if (!planId) {
+    res.status(400);
+    throw new Error('planId is required');
+  }
+
+  const plan = await Plan.findById(planId);
+  if (!plan) {
+    res.status(404);
+    throw new Error('Plan not found');
+  }
+
+  const startDate = reqStartDate ? new Date(reqStartDate) : new Date();
+  
+  let endDate;
+  if (plan.type === 'subscription' && plan.billingCycle && plan.billingCycle !== 'none') {
+    if (plan.billingCycle === 'weekly') endDate = addWeeks(startDate, 1);
+    else if (plan.billingCycle === 'monthly') endDate = addMonths(startDate, 1);
+    else if (plan.billingCycle === 'yearly') endDate = addYears(startDate, 1);
+  } else if (plan.durationValue && plan.durationUnit) {
+    if (plan.durationUnit === 'days') endDate = addDays(startDate, plan.durationValue);
+    else if (plan.durationUnit === 'weeks') endDate = addWeeks(startDate, plan.durationValue);
+    else if (plan.durationUnit === 'months') endDate = addMonths(startDate, plan.durationValue);
+  } else if (plan.durationWeeks) {
+    endDate = addWeeks(startDate, plan.durationWeeks);
+  }
+  const finalEndDate = endDate;
+
+  const isStaff = req.user && !['parent', 'customer'].includes((req.user.role || '').toLowerCase());
+  const targetUserId = (isStaff && req.body.userId) ? req.body.userId : req.user._id;
+
+  // 1. Same Plan Conflict
+  const existingSamePlan = await Membership.findOne({
+    userId: targetUserId,
+    childId: childId || null,
+    planId: planId,
+    status: { $in: ['active', 'frozen'] },
+    _id: { $ne: upgradeFromMembershipId },
+    $or: [
+      { endDate: { $gte: startDate } },
+      { endDate: null }
+    ]
+  }).populate('planId', 'name');
+
+  if (existingSamePlan) {
+    res.status(400);
+    throw new Error(`Conflict: This student already has an active membership for "${existingSamePlan.planId.name}" until ${existingSamePlan.endDate ? new Date(existingSamePlan.endDate).toLocaleDateString() : 'indefinitely'}.`);
+  }
+
+  // 2. Overlapping Schedule Conflict
+  if (preferredDays?.length > 0 && preferredSlots?.length > 0) {
+    const dayNormalizer = {
+      'sun': 'sun', 'mon': 'mon', 'tue': 'tue', 'wed': 'wed', 'thu': 'thu', 'fri': 'fri', 'sat': 'sat',
+      'sunday': 'sun', 'monday': 'mon', 'tuesday': 'tue', 'wednesday': 'wed', 'thursday': 'thu', 'friday': 'fri', 'saturday': 'sat'
+    };
+    const inputNormalizedDays = preferredDays.map(d => dayNormalizer[d.toLowerCase().trim()]).filter(Boolean);
+
+    const overlappingMemberships = await Membership.find({
+      userId: targetUserId,
+      childId: childId || null,
+      status: { $in: ['active', 'frozen'] },
+      _id: { $ne: upgradeFromMembershipId },
+      $or: [
+        { startDate: { $lte: finalEndDate }, endDate: { $gte: startDate } },
+        { endDate: null, startDate: { $lte: finalEndDate } }
+      ]
+    }).populate('planId', 'name');
+
+    for (const m of overlappingMemberships) {
+      const mNormalizedDays = (m.preferredDays || []).map(d => dayNormalizer[d.toLowerCase().trim()]).filter(Boolean);
+      const hasDayOverlap = inputNormalizedDays.some(d => mNormalizedDays.includes(d));
+
+      if (hasDayOverlap) {
+        const hasSlotOverlap = preferredSlots.some(s => (m.preferredSlots || []).includes(s));
+        if (hasSlotOverlap) {
+          res.status(400);
+          throw new Error(`Conflict: This student already has an active membership ("${m.planId.name}") booked for the same day and time slots.`);
+        }
+      }
+    }
+  }
+
+  res.json({ valid: true });
+});
 
 export const createMembership = asyncHandler(async (req, res) => {
   const {
@@ -993,7 +1086,11 @@ export const createMembership = asyncHandler(async (req, res) => {
       .populate('userId', 'name email firstName lastName')
       .populate('planId')
       .populate('childId')
-      .populate({ path: 'bookingId', select: 'participants bookingNumber' })
+      .populate({ 
+        path: 'bookingId', 
+        select: 'participants bookingNumber paymentId',
+        populate: { path: 'paymentId', select: 'reference' }
+      })
       .populate({ path: 'generatedSessions', populate: { path: 'trainerId', select: 'name' } });
 
     res.status(201).json(final);

@@ -25,7 +25,8 @@ const syncPayments = async (user = null, req = {}) => {
     // 0. Data Repair: Ensure existing healed payments have planId and locationId (enables cleanup and visibility)
     const incomplete = await Payment.find(withUAT(req, {
       bookingId: { $exists: true },
-      $or: [{ planId: { $exists: false } }, { locationId: null }]
+      $or: [{ planId: { $exists: false } }, { locationId: null }],
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
     })).populate('bookingId');
     for (const p of incomplete) {
       let changed = false;
@@ -40,8 +41,8 @@ const syncPayments = async (user = null, req = {}) => {
       if (changed) await p.save();
     }
 
-    // 2. Global Healing: Find ANY confirmed booking since March 24 missing a Payment record
-    const startDate = new Date('2026-03-01'); 
+    // 2. Global Healing: Find ANY confirmed booking from the last 24 hours missing a Payment record
+    const startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const missingBookings = await Booking.find(withUAT(req, {
       createdAt: { $gte: startDate }
     }));
@@ -52,7 +53,7 @@ const syncPayments = async (user = null, req = {}) => {
         continue;
       }
       // Heal Payment records
-      let exists = await Payment.findOne(withUAT(req, { 
+      let exists = await Payment.findOne(withUAT(req, {
         $or: [
           { bookingId: b._id },
           { groupId: b.groupId }
@@ -64,7 +65,7 @@ const syncPayments = async (user = null, req = {}) => {
         // Look for a payment with same plan/user/amount created within 1 hour of the booking
         const timeLimit = new Date(b.createdAt);
         timeLimit.setHours(timeLimit.getHours() - 1);
-        
+
         exists = await Payment.findOne(withUAT(req, {
           userId: b.userId,
           planId: b.planId,
@@ -90,8 +91,8 @@ const syncPayments = async (user = null, req = {}) => {
           amount: b.totalAmount,
           paymentMethod: b.paymentMethod || 'online',
           status: b.paymentStatus === 'completed' ? 'paid' : 'pending',
-          locationId: b.locationId, 
-          planId: b.planId, 
+          locationId: b.locationId,
+          planId: b.planId,
           membershipUnits: b.membershipUnits || 1,
           createdAt: b.createdAt,
           isUAT: b.isUAT || false
@@ -145,7 +146,7 @@ const syncPayments = async (user = null, req = {}) => {
 
 export const getMyPayments = asyncHandler(async (req, res) => {
   // Sync/Heal before fetching to ensure latest guest bookings are linked
-  await syncPayments(req.user);
+  syncPayments(req.user, req).catch(console.error);
 
   const payments = await Payment.find({ userId: req.user._id })
     .populate({
@@ -178,15 +179,15 @@ export const getPayments = asyncHandler(async (req, res) => {
   const { locationId: queryLocationId, startDate, endDate, all } = req.query;
 
   // 1. Sync/Heal before fetching
-  await syncPayments(null, req);
-  
+  syncPayments(null, req).catch(console.error);
+
   const locationIds = (queryLocationId && queryLocationId !== 'all') ? [queryLocationId] : resolveReadLocationIds(req);
-  
+
   const filter = {};
   if (locationIds && locationIds.length > 0) {
     filter.locationId = { $in: locationIds };
   }
-  
+
   if (startDate && endDate) {
     filter.createdAt = {
       $gte: new Date(startDate),
@@ -224,7 +225,7 @@ export const getPayments = asyncHandler(async (req, res) => {
 
 export const getAllPayments = asyncHandler(async (req, res) => {
   // Run global sync/healing for admin view
-  await syncPayments(null, req);
+  syncPayments(null, req).catch(console.error);
 
   const locationIds = resolveReadLocationIds(req);
   const filter = locationIds ? { locationId: { $in: locationIds } } : {};
@@ -269,7 +270,7 @@ export const createPayment = asyncHandler(async (req, res) => {
       res.status(400);
       throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
     }
-    
+
     const isValid = verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
     if (!isValid) {
       res.status(400);
@@ -346,7 +347,7 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
       res.status(400);
       throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
     }
-    
+
     const isValid = verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
     if (!isValid) {
       res.status(400);
@@ -511,7 +512,7 @@ export const exportPaymentsCsv = asyncHandler(async (req, res) => {
     } else if (methodStr?.startsWith('center_')) {
       methodStr = methodStr.replace('center_', '');
     }
-    
+
     return {
       user: p.userId?.name,
       email: p.userId?.email,
