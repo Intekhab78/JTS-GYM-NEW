@@ -162,7 +162,6 @@ export default function Navbar({ className = '' }) {
                 <div className="relative" ref={profileRef}>
                   <button 
                     onClick={() => {
-                      console.log('Profile clicked', !isProfileOpen);
                       setIsProfileOpen(!isProfileOpen);
                     }}
                     className="flex items-center gap-3 hover:opacity-80 transition-opacity focus:outline-none"
@@ -218,78 +217,131 @@ export default function Navbar({ className = '' }) {
              </NavLink>
           </div>
 
-          <button 
-            className="xl:hidden h-10 w-10 flex items-center justify-center bg-slate-100 rounded-xl"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            <div className={`hamburger ${isMobileMenuOpen ? 'active' : ''}`}>
-              <span className="block w-6 h-0.5 bg-ink mb-1 transition-all"></span>
-              <span className="block w-6 h-0.5 bg-ink mb-1 transition-all"></span>
-              <span className="block w-6 h-0.5 bg-ink transition-all"></span>
-            </div>
-          </button>
+          {/* Mobile Top Right Icons */}
+          <div className="flex xl:hidden items-center gap-2">
+            {showLocationSelect && (
+              <div className="scale-90 origin-right">
+                <LocationSelect />
+              </div>
+            )}
+            {user ? (
+               <NavLink to={dashboardPath} className="h-10 w-10 rounded-full bg-brand-blue/10 flex items-center justify-center text-brand-blue shadow-sm">
+                 {user.avatarUrl ? (
+                    <img 
+                      src={getImageUrl(user.avatarUrl)} 
+                      alt={user.name}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  ) : (
+                    <span className="text-xs font-black">{initials}</span>
+                  )}
+               </NavLink>
+            ) : (
+               <NavLink to="/login" className="text-[10px] font-black uppercase tracking-widest text-brand-blue bg-brand-blue/10 px-4 py-2 rounded-full">Sign In</NavLink>
+            )}
+          </div>
         </div>
+      </header>
 
+      {/* Mobile "More" Drawer */}
         {isMobileMenuOpen && (
-          <div className="xl:hidden bg-white border-t border-slate-50 animate-in slide-in-from-top-4 duration-300 max-h-[calc(100vh-80px)] overflow-y-auto">
-            <div className="page-shell py-8 flex flex-col gap-4">
-              {navLinks.map((link) => (
-                <NavLink 
-                  key={link.to} 
-                  to={link.to} 
-                  onClick={closeMenu}
-                  className="text-lg font-bold text-ink hover:text-brand-blue transition-colors px-4 py-2 rounded-2xl hover:bg-slate-50"
-                >
-                  {link.label}
-                </NavLink>
-              ))}
-              <div className="h-px bg-slate-100 my-2" />
-              {user && isUATGlobal && (user.allowUAT || user.role === 'superadmin') && (
-                <div className="px-4 py-2">
-                  <p className="text-[10px] font-black text-ink/40 uppercase tracking-widest mb-2">Environment Mode</p>
-                  <div className="flex items-center bg-slate-100 rounded-2xl p-1 border border-brand-navy/5">
-                    <button
-                      onClick={() => {
-                        localStorage.setItem('systemMode', 'live');
-                        window.location.reload();
-                      }}
-                      className={`flex-1 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                        (localStorage.getItem('systemMode') || 'live') === 'live'
-                          ? 'bg-white text-brand-blue shadow-sm'
-                          : 'text-ink/40'
-                      }`}
-                    >
-                      Live
-                    </button>
-                    <button
-                      onClick={() => {
-                        localStorage.setItem('systemMode', 'uat');
-                        window.location.reload();
-                      }}
-                      className={`flex-1 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                        localStorage.getItem('systemMode') === 'uat'
-                          ? 'bg-amber-500 text-white shadow-sm'
-                          : 'text-ink/40'
-                      }`}
-                    >
-                      UAT
-                    </button>
-                  </div>
-                </div>
-              )}
-              {showLocationSelect && <LocationSelect />}
-              {user ? (
-                <>
-                   <NavLink to={dashboardPath} onClick={closeMenu} className="text-lg font-bold text-brand-blue px-4">Dashboard</NavLink>
-                   <button onClick={handleLogout} className="text-lg font-bold text-rose-500 px-4 text-left">Logout</button>
-                </>
-              ) : (
-                <NavLink to="/login" onClick={closeMenu} className="text-lg font-bold text-brand-blue px-4">Sign In</NavLink>
-              )}
+          <div className="xl:hidden fixed inset-0 z-[60] bg-white flex flex-col animate-in slide-in-from-bottom-8 duration-300 pb-20">
+            <div className="flex justify-between items-center p-6 border-b border-slate-100 shadow-sm z-10">
+               <span className="font-display text-2xl font-black text-brand-blue">Menu</span>
+               <button onClick={closeMenu} className="p-2 bg-slate-50 rounded-full text-slate-400 hover:text-ink">
+                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+               </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-2">
+               {navLinks.filter(l => !['/', '/programs', '/schedule', '/pricing'].includes(l.to)).map((link) => (
+                 <NavLink 
+                   key={link.to} 
+                   to={link.to} 
+                   onClick={closeMenu}
+                   className="text-lg font-bold text-ink hover:text-brand-blue transition-colors px-4 py-4 rounded-2xl hover:bg-slate-50"
+                 >
+                   {link.label}
+                 </NavLink>
+               ))}
+               <NavLink to="/booking" onClick={closeMenu} className="text-lg font-bold text-brand-blue px-4 py-4 rounded-2xl bg-brand-blue/5 mt-4">
+                 Book Trial
+               </NavLink>
+
+               {user && isUATGlobal && (user.allowUAT || user.role === 'superadmin') && (
+                 <div className="mt-8 px-4 py-4 bg-slate-50 rounded-3xl">
+                   <p className="text-[10px] font-black text-ink/40 uppercase tracking-widest mb-3">Environment Mode</p>
+                   <div className="flex items-center bg-white rounded-2xl p-1 border border-slate-100 shadow-sm">
+                     <button
+                       onClick={() => {
+                         localStorage.setItem('systemMode', 'live');
+                         window.location.reload();
+                       }}
+                       className={`flex-1 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                         (localStorage.getItem('systemMode') || 'live') === 'live'
+                           ? 'bg-brand-blue text-white shadow-sm'
+                           : 'text-ink/40'
+                       }`}
+                     >
+                       Live
+                     </button>
+                     <button
+                       onClick={() => {
+                         localStorage.setItem('systemMode', 'uat');
+                         window.location.reload();
+                       }}
+                       className={`flex-1 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                         localStorage.getItem('systemMode') === 'uat'
+                           ? 'bg-amber-500 text-white shadow-sm'
+                           : 'text-ink/40'
+                       }`}
+                     >
+                       UAT
+                     </button>
+                   </div>
+                 </div>
+               )}
+               {user && (
+                 <div className="mt-8 border-t border-slate-100 pt-6 flex flex-col gap-2">
+                   <p className="text-[10px] font-black text-ink/40 uppercase tracking-widest px-4 mb-2">My Account</p>
+                   <NavLink to={dashboardPath} onClick={closeMenu} className="text-lg font-bold text-ink hover:text-brand-blue transition-colors px-4 py-4 rounded-2xl hover:bg-slate-50">Dashboard</NavLink>
+                   <NavLink to="/profile" onClick={closeMenu} className="text-lg font-bold text-ink hover:text-brand-blue transition-colors px-4 py-4 rounded-2xl hover:bg-slate-50">My Profile</NavLink>
+                   <button onClick={handleLogout} className="text-lg font-bold text-rose-500 px-4 py-4 text-left rounded-2xl hover:bg-rose-50 transition-colors">Logout</button>
+                 </div>
+               )}
             </div>
           </div>
         )}
-      </header>
+
+        {/* Mobile Bottom Navigation */}
+        <div className="xl:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-100 flex justify-around items-center h-[72px] pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+          <NavLink to="/" onClick={closeMenu} className={({isActive}) => `flex flex-col items-center justify-center w-full h-full space-y-1 ${isActive ? 'text-brand-blue' : 'text-slate-400'}`}>
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+             <span className="text-[9px] font-black uppercase tracking-widest">Home</span>
+          </NavLink>
+          <NavLink to="/programs" onClick={closeMenu} className={({isActive}) => `flex flex-col items-center justify-center w-full h-full space-y-1 ${isActive ? 'text-brand-blue' : 'text-slate-400'}`}>
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" /></svg>
+             <span className="text-[9px] font-black uppercase tracking-widest">Programs</span>
+          </NavLink>
+          <NavLink to="/schedule" onClick={closeMenu} className={({isActive}) => `flex flex-col items-center justify-center w-full h-full space-y-1 ${isActive ? 'text-brand-blue' : 'text-slate-400'}`}>
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+             <span className="text-[9px] font-black uppercase tracking-widest">Schedule</span>
+          </NavLink>
+          <NavLink to="/pricing" onClick={closeMenu} className={({isActive}) => `flex flex-col items-center justify-center w-full h-full space-y-1 ${isActive ? 'text-brand-blue' : 'text-slate-400'}`}>
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>
+             <span className="text-[9px] font-black uppercase tracking-widest">Members</span>
+          </NavLink>
+          <button onClick={() => setIsMobileMenuOpen(true)} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${isMobileMenuOpen ? 'text-brand-blue' : 'text-slate-400'}`}>
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+             <span className="text-[9px] font-black uppercase tracking-widest">More</span>
+          </button>
+        </div>
+      <style>{`
+        @media (max-width: 1279px) {
+          body {
+            padding-bottom: 72px;
+          }
+        }
+      `}</style>
     </>
   );
 }

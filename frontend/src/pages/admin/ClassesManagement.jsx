@@ -528,35 +528,35 @@ export default function ClassesManagement() {
               })
               .map((item) => (
             <div key={item._id} className="soft-card rounded-[32px] p-6 transition-all hover:shadow-xl group flex flex-col md:flex-row gap-6">
-              <div className="w-full md:w-32 h-32 rounded-2xl bg-slate-50 border border-slate-100 shrink-0 overflow-hidden">
+              <div className="w-full md:w-32 h-40 md:h-32 rounded-2xl bg-slate-50 border border-slate-100 shrink-0 overflow-hidden relative">
                 {item.imageUrl ? (
                   <img 
                     src={getImageUrl(item.imageUrl)} 
                     alt={item.title} 
-                    className="w-full h-full object-cover" 
+                    className="w-full h-full object-cover absolute inset-0" 
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                   />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-2xl">🖼️</div>
-                )}
+                ) : null}
+                <div className={`w-full h-full flex items-center justify-center text-2xl ${item.imageUrl ? 'hidden' : ''}`}>🖼️</div>
               </div>
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <div>
+              <div className="flex-1 flex flex-col">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-0">
+                  <div className="flex-1">
                     <h3 className="font-display text-xl text-ink leading-tight">{item.title}</h3>
                     {locations.find(l => l._id === (item.locationId?._id || item.locationId)) && (
                       <p className="text-xs font-bold text-ink/40 mt-1">
                         📍 {locations.find(l => l._id === (item.locationId?._id || item.locationId)).name}
                       </p>
                     )}
-                  <div className="flex gap-2 mt-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-ocean bg-ocean/5 px-2 py-0.5 rounded-full">{item.ageGroup}</span>
+                  <div className="flex flex-wrap items-center gap-2 mt-3 md:mt-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-ocean bg-ocean/5 px-2.5 py-1 md:py-0.5 rounded-lg md:rounded-full whitespace-nowrap">{item.ageGroup}</span>
                     {item.minAge || item.maxAge ? (
-                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-50 px-2.5 py-1 md:py-0.5 rounded-lg md:rounded-full whitespace-nowrap">
                         {item.minAge || 0}-{item.maxAge || '∞'} yrs
                       </span>
                     ) : null}
-                    <span className="text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">{item.genderRestriction}</span>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-ink/30 bg-slate-50 px-2 py-0.5 rounded-full">{item.duration}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 px-2.5 py-1 md:py-0.5 rounded-lg md:rounded-full whitespace-nowrap">{item.genderRestriction}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-ink/30 bg-slate-50 px-2.5 py-1 md:py-0.5 rounded-lg md:rounded-full whitespace-nowrap">{item.duration}</span>
                   </div>
                   <div className="mt-4">
                     <p className="text-[10px] font-black uppercase tracking-widest text-ink/30 mb-1">Available Trainers</p>
@@ -567,11 +567,13 @@ export default function ClassesManagement() {
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <p className="text-xl font-black text-brand-blue">AED {item.price}</p>
-                  {item.b2bPrice && <p className="text-xs font-bold text-indigo-500">B2B: AED {item.b2bPrice}</p>}
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{item.creditCost || 1} Credits</p>
-                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${item.status === 'inactive' ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-green-50 text-green-500 border border-green-100'}`}>
+                <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-start gap-4 md:gap-2 mt-4 md:mt-0 pt-4 md:pt-0 border-t border-slate-100 md:border-t-0">
+                  <div className="flex flex-col items-start md:items-end gap-1">
+                    <p className="text-xl md:text-2xl font-black text-brand-blue">AED {item.price}</p>
+                    {item.b2bPrice && <p className="text-xs font-bold text-indigo-500">B2B: AED {item.b2bPrice}</p>}
+                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{item.creditCost || 1} Credits</p>
+                  </div>
+                  <span className={`px-4 py-1.5 md:px-3 md:py-1 rounded-full text-[10px] md:text-[9px] font-black uppercase tracking-widest whitespace-nowrap ${item.status === 'inactive' ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-green-50 text-green-500 border border-green-100'}`}>
                     {item.status || 'Active'}
                   </span>
                 </div>

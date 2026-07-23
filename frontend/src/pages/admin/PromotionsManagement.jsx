@@ -240,24 +240,24 @@ export default function PromotionsManagement() {
           backTo={`/${roleSlug}`}
         />
 
-        <div className="mt-8 flex justify-between items-center">
-          <div className="flex gap-4 items-center">
-            <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm h-[72px] flex flex-col justify-center">
+        <div className="mt-8 flex flex-col lg:flex-row gap-4 justify-between lg:items-center">
+          <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center w-full lg:w-auto">
+            <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm h-[72px] flex flex-col justify-center text-center sm:text-left">
                <p className="text-[10px] font-black text-ink/30 uppercase tracking-widest leading-none mb-1">Active Campaigns</p>
                <p className="text-2xl font-black text-brand-blue leading-none">{promotions.filter(p => p.isActive).length}</p>
             </div>
             <button 
               onClick={handleDownloadReport}
-              className="bg-emerald-50 text-emerald-600 px-6 py-3 rounded-2xl font-black shadow-sm border border-emerald-100 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 h-[72px]"
+              className="bg-emerald-50 text-emerald-600 px-6 py-3 rounded-2xl font-black shadow-sm border border-emerald-100 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 h-[72px]"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               Download Report
             </button>
           </div>
           {canCreate && (
             <button 
               onClick={() => { resetForm(); setIsSidebarOpen(true); }}
-              className="bg-brand-blue text-white px-8 py-4 rounded-2xl font-black shadow-glow hover:scale-105 active:scale-95 transition-all"
+              className="w-full lg:w-auto bg-brand-blue text-white px-8 py-4 rounded-2xl font-black shadow-glow hover:scale-105 active:scale-95 transition-all text-sm sm:text-base"
             >
               + Create Promotion
             </button>

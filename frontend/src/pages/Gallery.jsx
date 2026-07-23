@@ -21,17 +21,17 @@ export default function Gallery() {
   return (
     <div>
       <Navbar />
-      <main className="page-shell py-12">
+      <main className="page-shell pt-6 pb-12 md:py-12">
         <SectionTitle
           kicker="Gallery"
           title="Inside the studio"
           subtitle="Snapshots from our sessions, events, and mini tournaments."
         />
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:gap-6 md:grid-cols-2 lg:grid-cols-3">
           {gallery.map((item, index) => (
             <div 
               key={item.label} 
-              className="group relative overflow-hidden rounded-[2.5rem] bg-surface ring-1 ring-ink/5 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20"
+              className="group relative overflow-hidden rounded-3xl md:rounded-[2.5rem] bg-surface ring-1 ring-ink/5 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/20"
               style={{ animationDelay: `${index * 100}ms` }}
             >
               <div className="aspect-[4/3] overflow-hidden">

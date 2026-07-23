@@ -283,19 +283,22 @@ export default function TrainersManagement() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-ink/50">Avatar / Photo</label>
-                  <div className="flex items-center gap-4">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileUpload}
-                      className="block w-full text-xs text-slate-500
-                        file:mr-4 file:py-2 file:px-4
-                        file:rounded-full file:border-0
-                        file:text-xs file:font-semibold
-                        file:bg-ocean file:text-white
-                        hover:file:bg-ocean-dark
-                        cursor-pointer"
-                    />
+                  <div className="flex items-center gap-4 w-full">
+                    <div className="relative flex-1">
+                      <input
+                        type="file"
+                        id="avatar-upload"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="avatar-upload"
+                        className="block w-full rounded-2xl border-slate-200 bg-slate-50 p-4 text-center text-[10px] md:text-xs font-bold text-ocean border-2 border-dashed cursor-pointer hover:bg-ocean/5 transition-colors"
+                      >
+                        Tap to upload photo
+                      </label>
+                    </div>
                     {form.avatarUrl && (
                       <img 
                         src={getImageUrl(form.avatarUrl)} 
@@ -309,19 +312,22 @@ export default function TrainersManagement() {
                 <div className="space-y-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-ink/50">Gallery Photos (Multi)</label>
                   <div className="space-y-4">
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleFileUpload(e, true)}
-                        className="block w-full text-xs text-slate-500
-                          file:mr-4 file:py-2 file:px-4
-                          file:rounded-full file:border-0
-                          file:text-xs file:font-semibold
-                          file:bg-moss file:text-white
-                          hover:file:bg-moss-dark
-                          cursor-pointer"
-                      />
+                    <div className="flex items-center gap-4 w-full">
+                      <div className="relative flex-1">
+                        <input
+                          type="file"
+                          id="gallery-upload"
+                          accept="image/*"
+                          onChange={(e) => handleFileUpload(e, true)}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor="gallery-upload"
+                          className="block w-full rounded-2xl border-slate-200 bg-slate-50 p-4 text-center text-[10px] md:text-xs font-bold text-moss border-2 border-dashed cursor-pointer hover:bg-moss/5 transition-colors"
+                        >
+                          Tap to add gallery photos
+                        </label>
+                      </div>
                       {uploading && <div className="h-4 w-4 animate-spin rounded-full border-2 border-moss border-t-transparent" />}
                     </div>
                     
@@ -353,9 +359,9 @@ export default function TrainersManagement() {
                   <span className="text-[10px] text-ocean normal-case font-medium">Tip: Managed in Specialty Master</span>
                 </label>
                 <div className="space-y-3">
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <select
-                      className="flex-1 rounded-2xl border-slate-200 bg-slate-50 p-3 text-sm focus:border-coral focus:ring-0 appearance-none cursor-pointer"
+                      className="w-full sm:flex-1 rounded-2xl border-slate-200 bg-slate-50 p-3 text-sm focus:border-coral focus:ring-0 appearance-none cursor-pointer"
                       onChange={(e) => {
                         const val = e.target.value;
                         if (!val) return;
@@ -372,7 +378,7 @@ export default function TrainersManagement() {
                       ))}
                     </select>
                     <input
-                      className="w-1/3 rounded-2xl border-slate-200 bg-slate-100 p-3 text-sm text-ink/40 cursor-not-allowed"
+                      className="w-full sm:w-1/3 rounded-2xl border-slate-200 bg-slate-100 p-3 text-sm text-ink/40 cursor-not-allowed"
                       name="specialties"
                       placeholder="Selected specialties"
                       value={form.specialties}

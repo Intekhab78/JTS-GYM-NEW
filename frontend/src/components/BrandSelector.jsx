@@ -10,25 +10,17 @@ const BrandSelector = () => {
   }
 
   return (
-    <div className="brand-selector" style={{ display: 'flex', alignItems: 'center', marginLeft: '1rem' }}>
-      <label htmlFor="brand-select" style={{ marginRight: '0.5rem', color: '#fff', fontSize: '14px' }}>
+    <div className="brand-selector flex items-center gap-2 shrink-0">
+      <label htmlFor="brand-select" className="text-white text-[10px] font-black uppercase tracking-[0.1em] hidden sm:block">
         Brand:
       </label>
       <select
         id="brand-select"
         value={selectedBrandId || 'ALL'}
         onChange={(e) => switchBrand(e.target.value)}
-        style={{
-          padding: '4px 8px',
-          borderRadius: '4px',
-          border: '1px solid #ccc',
-          backgroundColor: '#fff',
-          color: '#333',
-          fontSize: '14px',
-          cursor: 'pointer'
-        }}
+        className="bg-white text-ink rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider max-w-[130px] sm:max-w-[200px] truncate cursor-pointer focus:outline-none shadow-sm"
       >
-        <option value="ALL">Auto (Domain Based)</option>
+        <option value="ALL">Auto (Domain)</option>
         {brands.map((brand) => (
           <option key={brand._id} value={brand._id}>
             {brand.name}

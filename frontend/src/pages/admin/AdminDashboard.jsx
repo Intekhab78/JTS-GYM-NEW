@@ -145,7 +145,7 @@ export default function AdminDashboard() {
   return (
     <div>
       <Navbar />
-      <main className="page-shell pb-12 pt-8">
+      <main className="page-shell pb-12 pt-4 md:pt-8">
         <AdminHeader 
           title="Dashboard" 
           description="Track classes, attendance, payments, and new trial leads from one command center."
@@ -171,12 +171,12 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        <section className="mt-6 grid gap-4 md:grid-cols-3">
+        <section className="mt-4 md:mt-6 grid gap-3 md:gap-4 md:grid-cols-3">
           {filteredStats.map((stat) => (
             <Link 
               key={stat.label} 
               to={stat.to} 
-              className="soft-card block rounded-2xl p-6 transition-all hover:shadow-md hover:-translate-y-1"
+              className="soft-card block rounded-xl md:rounded-2xl p-4 md:p-6 transition-all hover:shadow-md hover:-translate-y-1"
             >
               <p className="text-xs font-bold text-ink/40 uppercase tracking-widest">{stat.label}</p>
               <p className={`mt-3 text-3xl font-black text-ink ${loading ? 'animate-pulse' : ''}`}>
@@ -187,14 +187,14 @@ export default function AdminDashboard() {
           ))}
         </section>
 
-        <section className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-6 md:mt-10 grid gap-4 md:gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {filteredActions.map((action) => {
             const count = getNotificationCount(action.title);
             return (
               <Link 
                 key={action.to} 
                 to={action.to} 
-                className="soft-card relative rounded-3xl p-6 transition hover:-translate-y-1"
+                className="soft-card relative rounded-2xl md:rounded-3xl p-4 md:p-6 transition hover:-translate-y-1"
                 onClick={(e) => {
                   const requiresShift = ['Walking Booking']; 
                   if (shouldBlockActions && requiresShift.includes(action.title)) {

@@ -156,16 +156,16 @@ export default function HelpCenter() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
       <Navbar />
-      <main className="page-shell flex-1 py-16">
+      <main className="page-shell flex-1 pt-6 pb-12 md:py-16">
         <div className="max-w-5xl mx-auto px-4">
-          <div className="text-center mb-16 animate-rise">
-            <h1 className="font-display text-5xl md:text-6xl font-black text-ink tracking-tight mb-6">How can we help?</h1>
+          <div className="text-center mb-8 md:mb-16 animate-rise">
+            <h1 className="font-display text-4xl md:text-6xl font-black text-ink tracking-tight mb-4 md:mb-6">How can we help?</h1>
             <div className="max-w-xl mx-auto relative group">
               <div className="absolute inset-0 bg-brand-blue/10 blur-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
               <input 
                 type="text" 
                 placeholder="Search for guides, workflows, or FAQs..."
-                className="w-full bg-white border-2 border-slate-100 rounded-[28px] py-6 px-10 text-lg font-bold text-ink shadow-sm focus:border-brand-blue/30 focus:ring-0 transition-all outline-none relative z-10"
+                className="w-full bg-white border-2 border-slate-100 rounded-[28px] py-4 px-6 md:py-6 md:px-10 text-sm md:text-lg font-bold text-ink shadow-sm focus:border-brand-blue/30 focus:ring-0 transition-all outline-none relative z-10"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -178,12 +178,12 @@ export default function HelpCenter() {
           <div className="grid lg:grid-cols-4 gap-10">
             {/* Sidebar Navigation */}
             <div className="lg:col-span-1 space-y-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/30 mb-6 ml-4">User Guides</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/30 mb-3 md:mb-6 ml-4">User Guides</p>
               {SECTIONS.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => { setActiveSection(s.id); setOpenFaq(null); }}
-                  className={`w-full flex items-center justify-between gap-4 p-5 rounded-[28px] text-sm font-black transition-all group ${
+                  className={`w-full flex items-center justify-between gap-4 p-4 md:p-5 rounded-[28px] text-sm font-black transition-all group ${
                     activeSection === s.id 
                       ? 'bg-brand-blue text-white shadow-glow-blue scale-[1.02]' 
                       : 'bg-white text-ink/50 hover:bg-slate-50 border border-slate-100 hover:border-brand-blue/20'
@@ -197,10 +197,10 @@ export default function HelpCenter() {
                 </button>
               ))}
 
-              <div className="mt-12 p-8 rounded-[36px] bg-slate-900 text-white shadow-xl relative overflow-hidden group">
+              <div className="mt-6 md:mt-12 p-6 md:p-8 rounded-3xl md:rounded-[36px] bg-slate-900 text-white shadow-xl relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-brand-blue/20 rounded-full blur-3xl group-hover:scale-150 transition-transform"></div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-brand-blue mb-4 relative z-10">Full Manual</p>
-                <h4 className="text-lg font-black leading-tight mb-4 relative z-10">Download Detailed PDF Process Guide</h4>
+                <p className="text-[10px] font-black uppercase tracking-widest text-brand-blue mb-2 md:mb-4 relative z-10">Full Manual</p>
+                <h4 className="text-base md:text-lg font-black leading-tight mb-4 relative z-10">Download Detailed PDF Process Guide</h4>
                 <button 
                   onClick={() => window.open(SECTIONS.find(s => s.id === activeSection)?.manualPath || '/manuals/user', '_blank')}
                   className="w-full bg-white text-ink py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all relative z-10"
@@ -222,12 +222,12 @@ export default function HelpCenter() {
               )}
 
               {filteredContent?.map((block, idx) => (
-                <div key={idx} className="bg-white rounded-[48px] p-12 border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-500 group">
-                  <h3 className="font-display text-3xl font-black text-ink mb-10 pb-6 border-b border-slate-50 group-hover:text-brand-blue transition-colors">{block.title}</h3>
-                  <div className="space-y-8">
+                <div key={idx} className="bg-white rounded-3xl md:rounded-[48px] p-6 md:p-12 border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-500 group">
+                  <h3 className="font-display text-2xl md:text-3xl font-black text-ink mb-6 md:mb-10 pb-4 md:pb-6 border-b border-slate-50 group-hover:text-brand-blue transition-colors">{block.title}</h3>
+                  <div className="space-y-4 md:space-y-8">
                     {block.steps.map((step, sIdx) => (
-                      <div key={sIdx} className="flex gap-8 group/step">
-                        <div className="w-10 h-10 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 text-xs font-black text-ink/30 group-hover/step:bg-brand-blue group-hover/step:text-white transition-all transform group-hover/step:rotate-12">
+                      <div key={sIdx} className="flex gap-4 md:gap-8 group/step">
+                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 text-[10px] md:text-xs font-black text-ink/30 group-hover/step:bg-brand-blue group-hover/step:text-white transition-all transform group-hover/step:rotate-12">
                           {sIdx + 1}
                         </div>
                         <p className="text-base font-bold text-ink/70 leading-relaxed pt-2 transition-all group-hover/step:text-ink">{step}</p>

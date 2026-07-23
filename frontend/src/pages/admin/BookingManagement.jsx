@@ -348,22 +348,22 @@ export default function BookingManagement() {
   return (
     <div className="min-h-screen bg-slate-50/50">
       <Navbar />
-      <main className="page-shell py-12">
+      <main className="page-shell pt-4 pb-12 md:py-12">
         <AdminHeader
           title="Booking Management"
           description="Manage and monitor all client registrations."
           backTo={`/${roleSlug}`}
         />
 
-        <div className="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+        <div className="mt-4 md:mt-8 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 mb-6 md:mb-10">
           <div>
             {/* Title moved to AdminHeader */}
           </div>
           <Link
             to={`/${roleSlug}/corporate-booking`}
-            className="bg-brand-blue text-white px-6 py-4 rounded-2xl font-black shadow-xl shadow-brand-blue/20 hover:scale-[1.02] transition-all flex items-center gap-3"
+            className="bg-brand-blue text-white px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-2xl font-black text-sm md:text-base shadow-xl shadow-brand-blue/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-2 md:gap-3"
           >
-            <span className="text-xl">🏢</span> New Corporate Booking
+            <span className="text-lg md:text-xl">🏢</span> New Corporate Booking
           </Link>
         </div>
 
@@ -417,7 +417,7 @@ export default function BookingManagement() {
         </div>
 
         {/* Filters Section */}
-        <div className="soft-card rounded-[32px] p-6 mb-8 bg-white/80 backdrop-blur-xl border border-white/50 shadow-glow">
+        <div className="soft-card rounded-2xl md:rounded-[32px] p-4 md:p-6 mb-6 md:mb-8 bg-white/80 backdrop-blur-xl border border-white/50 shadow-glow">
           <div className="grid gap-4 md:grid-cols-4">
             <div className="md:col-span-1">
               <label className="block text-[10px] font-black text-ink/30 uppercase tracking-[0.2em] mb-2 px-2">Search</label>
@@ -493,11 +493,11 @@ export default function BookingManagement() {
           {loading ? (
             Array(3).fill(0).map((_, i) => <div key={i} className="h-24 animate-pulse bg-white/50 rounded-3xl" />)
           ) : paginatedBookings.length > 0 ? paginatedBookings.map((booking) => (
-            <div key={booking._id} className="group relative overflow-hidden rounded-3xl bg-white p-6 shadow-sm border border-slate-100 transition-all hover:shadow-xl hover:translate-y-[-2px]">
-              <div className="flex flex-wrap items-center justify-between gap-6 relative z-10">
-                <div className="flex-1">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
+            <div key={booking._id} className="group relative overflow-hidden rounded-2xl md:rounded-3xl bg-white p-4 md:p-6 shadow-sm border border-slate-100 transition-all hover:shadow-xl hover:translate-y-[-2px]">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 md:gap-6 relative z-10">
+                <div className="flex-1 w-full xl:w-auto">
+                  <div className="flex flex-col gap-3 md:gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                       <h3 className="font-display text-lg text-ink/80 flex flex-wrap items-center gap-2">
                         {booking.participants?.map((p, idx) => (
                           <span key={idx}>
@@ -514,26 +514,26 @@ export default function BookingManagement() {
                         <span className="text-[10px] font-black text-ink/20 uppercase tracking-widest bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">#{booking._id.slice(-6)}</span>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-full tracking-widest flex items-center gap-1.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 md:py-0.5 rounded-lg md:rounded-full tracking-widest flex items-center gap-1.5 w-fit">
                         <span className="opacity-50">📅 Schedule:</span>
                         {new Date(booking.sessionId?.startTime || booking.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
                       <button
                         onClick={() => setDateFilter(booking.createdAt.split('T')[0])}
-                        className="text-[10px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full tracking-widest flex items-center gap-1.5 hover:bg-indigo-100 transition-colors"
+                        className="text-[10px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-1 md:py-0.5 rounded-lg md:rounded-full tracking-widest flex items-center gap-1.5 hover:bg-indigo-100 transition-colors w-fit"
                       >
                         <span className="opacity-50">📝 Booked:</span>
                         {new Date(booking.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </button>
                       {booking.bookingType === 'package' && (
-                        <span className="text-[10px] font-black text-white bg-indigo-600 px-2.5 py-0.5 rounded-full tracking-widest animate-pulse">
+                        <span className="text-[10px] font-black text-white bg-indigo-600 px-2.5 py-1 md:py-0.5 rounded-lg md:rounded-full tracking-widest animate-pulse w-fit">
                           📦 Package Purchase
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <div className="mt-4 md:mt-2 flex flex-col md:flex-row md:flex-wrap md:items-center gap-2 md:gap-x-4 md:gap-y-1">
                     <p className="text-xs font-bold text-brand-blue">
                       {booking.bookingType === 'package' ? `Membership: ${booking.planId?.name || 'Package'}` : booking.classId?.title}
                     </p>
@@ -547,9 +547,9 @@ export default function BookingManagement() {
                         📍 {typeof booking.locationId === 'object' ? booking.locationId.name : locations.find(l => l._id === booking.locationId)?.name || 'Central'}
                       </p>
                     )}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 md:gap-x-4 md:gap-y-1">
                       {booking.paymentStatus === 'completed' && booking.processedBy && (
-                        <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest flex items-center gap-1.5 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100 shadow-sm">
+                        <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 md:py-1 rounded-lg border border-emerald-100 shadow-sm w-fit">
                           <span>👤 Received by:</span>
                           <span className="text-ink font-black">{booking.processedBy.name || booking.processedBy}</span>
                           <span className="opacity-40 text-[8px]">({booking.processedByRole || 'Staff'})</span>
@@ -559,17 +559,17 @@ export default function BookingManagement() {
                         </p>
                       )}
                       {(!booking.processedBy || booking.paymentStatus !== 'completed') && (
-                        <p className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 px-3 py-1 rounded-lg border shadow-sm ${getPaymentMethodStyles(booking.paymentMethod)}`}>
+                        <p className={`text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 px-3 py-1.5 md:py-1 rounded-lg border shadow-sm w-fit ${getPaymentMethodStyles(booking.paymentMethod)}`}>
                           <span className="text-xs">💳</span> {formatPaymentMethod(booking.paymentMethod)}
                         </p>
                       )}
                       {!booking.processedBy && booking.paymentStatus === 'completed' && (
-                        <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest flex items-center gap-1.5 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">
+                        <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest flex items-center gap-1.5 bg-indigo-50 px-2.5 py-1 md:py-0.5 rounded-lg border border-indigo-100 w-fit">
                           <span>🌐 Source:</span> Website / Customer
                         </p>
                       )}
                       {booking.processedByRole && booking.paymentStatus === 'pending' && (
-                        <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest flex items-center gap-1.5 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-100">
+                        <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest flex items-center gap-1.5 bg-amber-50 px-2.5 py-1 md:py-0.5 rounded-lg border border-amber-100 w-fit">
                           <span>🚶 Walking:</span> {booking.processedBy.name || 'Staff'} ({booking.processedByRole})
                         </p>
                       )}
@@ -583,10 +583,10 @@ export default function BookingManagement() {
                       </Link>
                     </div>
                   </div>
-                  <div className="mt-4 flex items-center gap-3">
+                  <div className="mt-6 md:mt-4 flex flex-col md:flex-row md:items-center gap-3">
                     <button
                       onClick={() => setViewingBookingDetails(booking)}
-                      className="px-5 py-2.5 bg-slate-50 text-brand-blue text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-brand-blue hover:text-white transition-all border border-slate-100 shadow-sm flex items-center gap-2 group"
+                      className="w-full md:w-auto px-5 py-3 md:py-2.5 bg-slate-50 text-brand-blue text-[10px] md:text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-brand-blue hover:text-white transition-all border border-slate-100 shadow-sm flex items-center justify-center md:justify-start gap-2 group"
                     >
                       <span className="group-hover:scale-110 transition-transform">🔍</span>
                       <span>View Full Details</span>
@@ -602,8 +602,8 @@ export default function BookingManagement() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="text-right flex flex-col items-end gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between xl:justify-end gap-4 w-full xl:w-auto mt-4 xl:mt-0 pt-4 xl:pt-0 border-t border-slate-100 xl:border-t-0">
+                  <div className="text-left xl:text-right flex flex-col items-start xl:items-end gap-3 md:gap-2 w-full xl:w-auto">
                     {canEdit && booking.paymentMethod === 'center' && booking.paymentStatus === 'pending' && booking.status !== 'cancelled' && !isBookingLocked(booking) && (
                       <button
                         onClick={() => confirmCenterPayment(booking._id)}
@@ -668,15 +668,15 @@ export default function BookingManagement() {
                         {sendingReminderId === booking._id ? 'Sending...' : 'Send Reminder'}
                       </button>
                     )}
-                    <div>
-                      <p className="text-xs font-black text-ink/30 uppercase tracking-widest mb-1 text-right flex items-center justify-end gap-1">
+                    <div className="w-full xl:w-auto flex flex-col xl:items-end">
+                      <p className="text-[10px] md:text-xs font-black text-ink/30 uppercase tracking-widest mb-2 xl:mb-1 text-left xl:text-right flex items-center gap-1">
                         {isBookingLocked(booking) && <span title="Status Locked">🔒</span>}
                         Status
                       </p>
                       {canEdit ? (
                         <select
                           disabled={isBookingLocked(booking)}
-                          className={`rounded-xl border-none p-2.5 text-xs font-bold transition-all outline-none focus:ring-2 ${booking.status === 'completed' ? 'bg-indigo-100 text-indigo-700 focus:ring-indigo-200' :
+                          className={`w-full xl:w-auto rounded-xl border-none py-3 px-4 xl:p-2.5 text-xs font-bold transition-all outline-none focus:ring-2 ${booking.status === 'completed' ? 'bg-indigo-100 text-indigo-700 focus:ring-indigo-200' :
                             booking.status === 'attended' ? 'bg-sky-100 text-sky-700 focus:ring-sky-200' :
                               booking.status === 'confirmed' ? 'bg-moss/10 text-moss focus:ring-moss/20' :
                                 booking.status === 'pending' ? 'bg-amber-100 text-amber-700 focus:ring-amber-200' :
@@ -1234,13 +1234,13 @@ const StatCard = ({ label, value, icon, color, loading, onClick, isActive }) => 
   return (
     <div
       onClick={onClick}
-      className={`soft-card rounded-[32px] p-5 flex flex-col items-center justify-center text-center transition-all border bg-white cursor-pointer ${activeStyles} ${loading ? 'animate-pulse opacity-60' : ''}`}
+      className={`soft-card rounded-2xl md:rounded-[32px] p-4 md:p-5 flex flex-col items-center justify-center text-center transition-all border bg-white cursor-pointer ${activeStyles} ${loading ? 'animate-pulse opacity-60' : ''}`}
     >
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-3 ${colors[color] || colors.slate} border`}>
+      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center text-base md:text-xl mb-2 md:mb-3 ${colors[color] || colors.slate} border`}>
         {icon}
       </div>
-      <p className="text-[10px] font-black uppercase tracking-widest text-ink/30 mb-1">{label}</p>
-      <p className="text-2xl font-black text-ink">
+      <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-ink/30 mb-1">{label}</p>
+      <p className="text-xl md:text-2xl font-black text-ink">
         {loading ? '—' : value}
       </p>
     </div>

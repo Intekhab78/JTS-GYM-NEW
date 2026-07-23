@@ -43,13 +43,13 @@ export default function LocationPicker({ compact = false, allowAll = false }) {
 
   if (compact) {
     return (
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-nowrap sm:flex-wrap items-center gap-2 sm:gap-3 overflow-x-auto hide-scrollbar pb-1 sm:pb-0 w-full">
         {locations.map((loc) => (
           <button
             key={loc._id}
             type="button"
             onClick={() => handleSelect(loc)}
-            className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${selected?._id === loc._id ? 'border-coral bg-coral/10 text-coral' : 'border-ink/10 text-ink/70'
+            className={`shrink-0 whitespace-nowrap rounded-full border px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold transition ${selected?._id === loc._id ? 'border-coral bg-coral/10 text-coral shadow-sm' : 'border-ink/10 text-ink/70 bg-white sm:bg-transparent'
               }`}
           >
             {loc.name}
