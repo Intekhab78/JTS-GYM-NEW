@@ -67,8 +67,8 @@ export default function Programs() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar />
-      <main className="page-shell flex-1 py-12">
-        <div className="pt-4 md:pt-8">
+      <main className="page-shell flex-1 py-6 md:py-12">
+        <div className="pt-2 md:pt-8">
           <SectionTitle
             kicker="Programs"
             title="Choose a class path"
@@ -77,40 +77,40 @@ export default function Programs() {
         </div>
 
         {/* Filters Section */}
-        <div className="mt-8 mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6 p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm transition-all hover:shadow-md">
-          <div className="group flex-1 max-w-md relative">
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-              <svg className="h-5 w-5 text-ink/30 group-focus-within:text-brand-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="mt-4 md:mt-8 mb-6 md:mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 p-4 md:p-6 rounded-3xl md:rounded-[32px] bg-white border border-slate-100 shadow-sm transition-all hover:shadow-md">
+          <div className="group flex-1 w-full md:max-w-md relative">
+            <div className="absolute inset-y-0 left-3 md:left-4 flex items-center pointer-events-none">
+              <svg className="h-4 w-4 md:h-5 md:w-5 text-ink/30 group-focus-within:text-brand-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
             <input
               type="text"
-              placeholder="Search for classes..."
-              className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-medium focus:ring-2 focus:ring-brand-blue/20 focus:bg-white transition-all outline-none"
+              placeholder="Search classes..."
+              className="w-full bg-slate-50 border-none rounded-xl md:rounded-2xl py-2 pl-9 pr-3 md:py-3 md:pl-12 md:pr-4 text-xs md:text-sm font-medium focus:ring-2 focus:ring-brand-blue/20 focus:bg-white transition-all outline-none"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-ink/30 uppercase tracking-widest">Age Group:</span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
+            <div className="flex items-center justify-between sm:justify-start gap-3 bg-slate-50 sm:bg-transparent p-2 sm:p-0 rounded-xl sm:rounded-none">
+              <span className="text-[10px] md:text-xs font-bold text-ink/30 uppercase tracking-widest pl-1 sm:pl-0">Age Group:</span>
               <select
-                className="bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold text-ink/70 focus:ring-2 focus:ring-brand-blue/20 outline-none cursor-pointer hover:bg-slate-100 transition-all"
+                className="bg-white sm:bg-slate-50 border-none rounded-lg md:rounded-2xl py-1.5 px-2 md:py-3 md:px-4 text-[11px] md:text-sm font-bold text-ink/70 focus:ring-2 focus:ring-brand-blue/20 outline-none cursor-pointer hover:bg-slate-100 transition-all flex-1 sm:flex-none"
                 value={selectedAge}
                 onChange={(e) => setSelectedAge(e.target.value)}
               >
                 {ageGroups.map(group => (
-                  <option key={group} value={group}>{group}</option>
+                  <option key={group} value={group}>{group === 'All' ? 'All Ages' : group}</option>
                 ))}
               </select>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-ink/30 uppercase tracking-widest">Category:</span>
+            <div className="flex items-center justify-between sm:justify-start gap-3 bg-slate-50 sm:bg-transparent p-2 sm:p-0 rounded-xl sm:rounded-none">
+              <span className="text-[10px] md:text-xs font-bold text-ink/30 uppercase tracking-widest pl-1 sm:pl-0">Category:</span>
               <select
-                className="bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold text-ink/70 focus:ring-2 focus:ring-brand-blue/20 outline-none cursor-pointer hover:bg-slate-100 transition-all"
+                className="bg-white sm:bg-slate-50 border-none rounded-lg md:rounded-2xl py-1.5 px-2 md:py-3 md:px-4 text-[11px] md:text-sm font-bold text-ink/70 focus:ring-2 focus:ring-brand-blue/20 outline-none cursor-pointer hover:bg-slate-100 transition-all flex-1 sm:flex-none"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
@@ -121,11 +121,13 @@ export default function Programs() {
               </select>
             </div>
 
-            <div className="h-10 w-[1px] bg-slate-100 hidden md:block mx-2"></div>
+            <div className="h-8 w-[1px] bg-slate-100 hidden md:block mx-1"></div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-ink/30 uppercase tracking-widest">Branch:</span>
-              <LocationPicker compact />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-slate-50 sm:bg-transparent p-2 sm:p-0 rounded-xl sm:rounded-none">
+              <span className="text-[10px] md:text-xs font-bold text-ink/30 uppercase tracking-widest pl-1 sm:pl-0 self-start sm:self-center mt-1 sm:mt-0">Branch:</span>
+              <div className="w-full sm:w-auto">
+                <LocationPicker compact />
+              </div>
             </div>
           </div>
         </div>

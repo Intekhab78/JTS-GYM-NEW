@@ -402,28 +402,28 @@ export default function SessionsManagement() {
           <div>
             {/* Header info moved to AdminHeader */}
           </div>
-          <div className="flex flex-col items-end gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center md:items-end justify-between sm:justify-end gap-3 w-full md:w-auto mt-4 md:mt-0">
             <button
               onClick={() => setShowBulkModal(true)}
-              className="bg-ink text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-ink/90 transition-all flex items-center gap-2 shadow-lg shadow-ink/10"
+              className="w-full sm:w-auto justify-center bg-ink text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-ink/90 transition-all flex items-center gap-2 shadow-lg shadow-ink/10"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
               Bulk Generator
             </button>
-            <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-100">
+            <div className="flex w-full sm:w-auto bg-white p-1 rounded-xl shadow-sm border border-slate-100">
               <button
                 type="button"
                 onClick={() => setView('active')}
-                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'active' ? 'bg-brand-blue text-white shadow-md' : 'text-ink/30 hover:text-ink'}`}
+                className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'active' ? 'bg-brand-blue text-white shadow-md' : 'text-ink/30 hover:text-ink'}`}
               >
                 Active
               </button>
               <button
                 type="button"
                 onClick={() => setView('expired')}
-                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'expired' ? 'bg-brand-blue text-white shadow-md' : 'text-ink/30 hover:text-ink'}`}
+                className={`flex-1 sm:flex-none px-4 py-2 sm:py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'expired' ? 'bg-brand-blue text-white shadow-md' : 'text-ink/30 hover:text-ink'}`}
               >
                 Expired / Closed
               </button>
@@ -432,8 +432,8 @@ export default function SessionsManagement() {
         </div>
 
         {canCreate || (editingId && canEdit) ? (
-          <div className="soft-card rounded-[48px] p-8 md:p-10 mb-10">
-            <form className="grid gap-6" onSubmit={handleSubmit}>
+          <div className="soft-card rounded-[32px] md:rounded-[48px] p-5 md:p-10 mb-6 md:mb-10">
+            <form className="grid gap-4 md:gap-6" onSubmit={handleSubmit}>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase tracking-widest text-ink/30 ml-4">Class Path</label>
@@ -612,16 +612,16 @@ export default function SessionsManagement() {
         )}
 
         {/* Search and Date Filter Bar */}
-        <div className="mb-6 flex flex-col xl:flex-row items-center justify-between gap-4 bg-white p-4 rounded-[28px] border border-slate-100 shadow-sm">
-          <div className="flex flex-wrap items-center gap-4 shrink-0">
-            <div className="relative">
+        <div className="mb-6 flex flex-col xl:flex-row items-center justify-between gap-4 bg-white p-4 md:p-5 rounded-[28px] md:rounded-[32px] border border-slate-100 shadow-sm">
+          <div className="flex flex-col sm:flex-row w-full xl:w-auto gap-3 md:gap-4 shrink-0">
+            <div className="relative w-full sm:w-auto">
               <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                <span className="text-xs font-bold text-ink/30 uppercase tracking-widest">Trainer:</span>
+                <span className="text-[10px] md:text-xs font-bold text-ink/30 uppercase tracking-widest">Trainer:</span>
               </div>
               <select
                 value={selectedTrainerFilter}
                 onChange={(e) => setSelectedTrainerFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-100 rounded-xl py-2.5 pl-[85px] pr-8 text-xs font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all cursor-pointer min-w-[180px] max-w-[220px] truncate"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 md:py-2.5 pl-[75px] md:pl-[85px] pr-8 text-xs md:text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all cursor-pointer sm:min-w-[180px] sm:max-w-[220px] truncate"
               >
                 <option value="all">All Trainers</option>
                 {trainers.map(t => (
@@ -630,14 +630,14 @@ export default function SessionsManagement() {
               </select>
             </div>
 
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                <span className="text-xs font-bold text-ink/30 uppercase tracking-widest">Program:</span>
+                <span className="text-[10px] md:text-xs font-bold text-ink/30 uppercase tracking-widest">Program:</span>
               </div>
               <select
                 value={selectedClassFilter}
                 onChange={(e) => setSelectedClassFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-100 rounded-xl py-2.5 pl-[85px] pr-8 text-xs font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all cursor-pointer min-w-[180px] max-w-[220px] truncate"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 md:py-2.5 pl-[85px] md:pl-[95px] pr-8 text-xs md:text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all cursor-pointer sm:min-w-[180px] sm:max-w-[220px] truncate"
               >
                 <option value="all">All Programs</option>
                 <optgroup label="Classes">
@@ -656,32 +656,34 @@ export default function SessionsManagement() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 w-full">
-            {[
-              { id: 'all', label: 'All Dates' },
-              { id: 'today', label: 'Today' },
-              { id: 'tomorrow', label: 'Tomorrow' },
-              { id: 'week', label: 'This Week' },
-              { id: 'month', label: 'This Month' }
-            ].map(opt => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => {
-                  setDateFilterOption(opt.id);
-                  setCustomDateFilter('');
-                }}
-                className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dateFilterOption === opt.id
-                  ? 'bg-brand-blue text-white shadow-md shadow-brand-blue/15'
-                  : 'bg-slate-50 text-ink/40 hover:bg-slate-100 hover:text-ink/60'
-                  }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center xl:justify-end gap-2 w-full mt-4 xl:mt-0 pt-4 xl:pt-0 border-t border-slate-100 xl:border-t-0">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {[
+                { id: 'all', label: 'All Dates' },
+                { id: 'today', label: 'Today' },
+                { id: 'tomorrow', label: 'Tomorrow' },
+                { id: 'week', label: 'This Week' },
+                { id: 'month', label: 'This Month' }
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    setDateFilterOption(opt.id);
+                    setCustomDateFilter('');
+                  }}
+                  className={`px-4 md:px-5 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all flex-1 sm:flex-none text-center ${dateFilterOption === opt.id
+                    ? 'bg-brand-blue text-white shadow-md shadow-brand-blue/15'
+                    : 'bg-slate-50 text-ink/40 hover:bg-slate-100 hover:text-ink/60'
+                    }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
 
-            <div className="flex items-center gap-3 ml-2">
-              <span className="text-[10px] font-black text-ink/30 uppercase tracking-widest">Or Select Date:</span>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:ml-2 mt-2 sm:mt-0 w-full sm:w-auto">
+              <span className="text-[10px] font-black text-ink/30 uppercase tracking-widest text-center sm:text-left">Or Select Date:</span>
               <input
                 type="date"
                 value={customDateFilter}
@@ -694,7 +696,7 @@ export default function SessionsManagement() {
                     setDateFilterOption('all');
                   }
                 }}
-                className="bg-slate-50 border border-slate-100 rounded-xl py-2 px-4 text-xs font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all cursor-pointer"
+                className="bg-slate-50 border border-slate-100 rounded-xl py-3 md:py-2 px-4 text-xs font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all cursor-pointer w-full sm:w-auto"
               />
             </div>
           </div>
@@ -708,14 +710,14 @@ export default function SessionsManagement() {
             </div>
           ) : paginatedSessions.length > 0 ? (
             paginatedSessions.map((session) => (
-              <div key={session._id} className={`soft-card rounded-[32px] p-6 hover:shadow-xl transition-all group flex flex-col md:flex-row items-center justify-between gap-6 border ${new Date(session.startTime) < new Date() ? 'bg-slate-50/50 border-slate-200/50' : 'border-slate-100/50'}`}>
-                <div className="flex items-center gap-6 flex-1">
-                  <div className={`w-16 h-16 rounded-[24px] flex flex-col items-center justify-center ${new Date(session.startTime) < new Date() ? 'bg-slate-200/50 text-ink/20' : 'bg-brand-blue/5 text-brand-blue'}`}>
-                    <span className="text-[10px] font-black uppercase tracking-tighter">{new Date(session.startTime).toLocaleDateString('en-US', { month: 'short' })}</span>
-                    <span className="text-xl font-black leading-none">{new Date(session.startTime).getDate()}</span>
+              <div key={session._id} className={`soft-card rounded-2xl md:rounded-[32px] p-4 md:p-6 hover:shadow-xl transition-all group flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-6 border ${new Date(session.startTime) < new Date() ? 'bg-slate-50/50 border-slate-200/50' : 'border-slate-100/50'}`}>
+                <div className="flex items-start md:items-center gap-4 md:gap-6 flex-1 w-full">
+                  <div className={`shrink-0 w-14 h-14 md:w-16 md:h-16 rounded-xl md:rounded-[24px] flex flex-col items-center justify-center ${new Date(session.startTime) < new Date() ? 'bg-slate-200/50 text-ink/20' : 'bg-brand-blue/5 text-brand-blue'}`}>
+                    <span className="text-[9px] md:text-[10px] font-black uppercase tracking-tighter">{new Date(session.startTime).toLocaleDateString('en-US', { month: 'short' })}</span>
+                    <span className="text-lg md:text-xl font-black leading-none">{new Date(session.startTime).getDate()}</span>
                   </div>
-                  <div>
-                    <h3 className={`font-display text-xl ${new Date(session.startTime) < new Date() ? 'text-ink/30' : 'text-ink'}`}>{session.classId?.title}</h3>
+                  <div className="flex-1">
+                    <h3 className={`font-display text-lg md:text-xl leading-tight md:leading-normal ${new Date(session.startTime) < new Date() ? 'text-ink/30' : 'text-ink'}`}>{session.classId?.title}</h3>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
                       <p className="text-xs font-bold text-ink/60 flex items-center gap-1.5 leading-none">
                         <span className={`w-1.5 h-1.5 rounded-full ${new Date(session.startTime) < new Date() ? 'bg-slate-300' : 'bg-ocean'}`}></span>
@@ -769,10 +771,10 @@ export default function SessionsManagement() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-none border-slate-100 justify-start md:justify-end">
+                <div className="flex flex-row flex-wrap items-center justify-start md:justify-end gap-2 md:gap-3 w-full md:w-auto mt-2 md:mt-0 pt-4 md:pt-0 border-t md:border-none border-slate-100">
                   {canEdit && (
                     <button
-                      className={`rounded-full px-6 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${new Date(session.startTime) < new Date()
+                      className={`flex-1 md:flex-none text-center justify-center rounded-lg md:rounded-full px-4 md:px-6 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${new Date(session.startTime) < new Date()
                         ? 'bg-white border border-slate-200 text-ink/40 hover:bg-slate-50'
                         : 'bg-brand-blue text-white hover:bg-brand-blue/90 shadow-md shadow-brand-blue/10'
                         }`}
@@ -802,7 +804,7 @@ export default function SessionsManagement() {
                   )}
                   {canDelete && (
                     <button
-                      className={`h-10 px-4 flex items-center justify-center rounded-full text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${session.status === 'scheduled' ? 'bg-red-50 text-red-500 hover:bg-red-500 hover:text-white' : 'bg-green-50 text-green-500 hover:bg-green-500 hover:text-white'}`}
+                      className={`h-10 px-4 flex-1 md:flex-none flex items-center justify-center rounded-lg md:rounded-full text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${session.status === 'scheduled' ? 'bg-red-50 text-red-500 hover:bg-red-500 hover:text-white' : 'bg-green-50 text-green-500 hover:bg-green-500 hover:text-white'}`}
                       onClick={() => handleToggleStatus(session)}
                     >
                       {session.status === 'scheduled' ? 'Cancel Slot' : 'Restore'}

@@ -353,7 +353,7 @@ export default function PricingManagement() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-ink/40 px-1">Validity</label>
                   <input
@@ -380,7 +380,7 @@ export default function PricingManagement() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-ink/40 px-1">Plan Category</label>
                   <select
@@ -415,7 +415,7 @@ export default function PricingManagement() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 pt-1">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-ink/40 px-1">Duration</label>
                   <input
@@ -467,9 +467,9 @@ export default function PricingManagement() {
             </div>
 
             <div className="flex flex-col gap-3 pt-1 p-4 rounded-xl border border-dashed border-indigo-200 bg-indigo-50/30">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <p className="text-[10px] font-bold uppercase text-ink/40">Bonus/Free Classes</p>
-                <button type="button" className="text-xs font-bold text-ocean hover:text-ocean/70" onClick={() => setForm(prev => ({ ...prev, bonuses: [...(prev.bonuses || []), { quantity: 0, itemType: 'same', itemId: '' }] }))}>
+                <button type="button" className="w-full sm:w-auto text-center sm:text-right text-xs font-bold text-ocean hover:text-ocean/70 bg-white sm:bg-transparent rounded-lg py-2 sm:py-0 border border-ocean/20 sm:border-none" onClick={() => setForm(prev => ({ ...prev, bonuses: [...(prev.bonuses || []), { quantity: 0, itemType: 'same', itemId: '' }] }))}>
                   + Add Bonus
                 </button>
               </div>
@@ -703,7 +703,7 @@ export default function PricingManagement() {
                   <input className="w-full rounded-xl border border-orange-200/70 p-3 text-sm" name="timeSlots" placeholder="10:00 AM, 04:00 PM" value={form.timeSlots} onChange={handleChange} />
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-ink/40 px-1">Session Duration</label>
                   <input className="w-full rounded-xl border border-orange-200/70 p-3 text-sm" type="number" name="sessionDuration" placeholder="e.g. 45" value={form.sessionDuration} onChange={handleChange} />
@@ -761,13 +761,13 @@ export default function PricingManagement() {
             {locations.length > 0 && (
               <div className="rounded-xl border border-orange-200/70 p-3 bg-slate-50/50">
                 <p className="text-[10px] font-bold text-ink/40 uppercase mb-2">Available Locations</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-2">
                   {locations
                     .filter(loc => loc.status === 'active')
                     .map(loc => {
                       const isPrimary = form.locationId && loc._id === form.locationId;
                       return (
-                      <label key={loc._id} className={`flex items-center gap-2 text-xs font-bold text-ink/70 bg-white px-3 py-1.5 rounded-full border border-slate-100 transition-all cursor-pointer hover:bg-slate-50`}>
+                      <label key={loc._id} className={`flex items-center gap-2 text-xs font-bold text-ink/70 bg-white px-4 py-2 sm:px-3 sm:py-1.5 rounded-xl sm:rounded-full border border-slate-100 transition-all cursor-pointer hover:bg-slate-50`}>
                         <input
                           type="checkbox"
                           checked={form.replicateToLocations?.includes(loc._id) || false}
@@ -786,14 +786,14 @@ export default function PricingManagement() {
                 </div>
               </div>
             )}
-            <div className="flex flex-wrap gap-3">
-              <button className="rounded-full bg-coral px-5 py-3 text-sm font-semibold text-white" type="submit">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 mt-2">
+              <button className="w-full sm:w-auto rounded-xl sm:rounded-full bg-coral px-5 py-3 text-sm font-semibold text-white text-center" type="submit">
                 {editingId ? 'Update plan' : 'Create plan'}
               </button>
               {editingId ? (
                 <button
                   type="button"
-                  className="rounded-full border border-ink/10 px-5 py-3 text-sm font-semibold text-ink"
+                  className="w-full sm:w-auto rounded-xl sm:rounded-full border border-ink/10 px-5 py-3 text-sm font-semibold text-ink text-center"
                   onClick={handleCancel}
                 >
                   Cancel
@@ -812,35 +812,37 @@ export default function PricingManagement() {
             Array(4).fill(0).map((_, i) => <div key={i} className="h-32 animate-pulse bg-white rounded-2xl" />)
           ) : plans.map((plan) => (
             <div key={plan._id} className="rounded-2xl bg-white/80 p-4 shadow-glow">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-semibold">{plan.name}</p>
+              <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-2 sm:gap-4">
+                <div className="flex-1">
+                  <p className="font-semibold text-lg sm:text-base leading-tight">{plan.name}</p>
                   {locations.find(l => l._id === (plan.locationId?._id || plan.locationId)) && (
-                    <p className="text-[10px] font-bold text-ink/40 mb-1">
+                    <p className="text-[10px] font-bold text-ink/40 mt-1 mb-1">
                       📍 {locations.find(l => l._id === (plan.locationId?._id || plan.locationId)).name}
                     </p>
                   )}
-                  <p className="text-xs text-ink/70">{plan.validity}</p>
-                  <p className="text-xs text-ink/70">
-                    {plan.classesIncluded === 0 ? '∞ Unlimited Classes' : (plan.type === 'credit-based' ? `${plan.creditsIncluded} Total Credits` : `${plan.classesIncluded} Classes`)}
-                  </p>
-                  <p className="text-xs text-ink/70">
-                    Type: <span className="capitalize">{plan.type?.replace('-', ' ')}</span>
-                    {plan.type === 'subscription' && plan.billingCycle !== 'none' && ` (${plan.billingCycle})`}
-                  </p>
+                  <div className="mt-2 space-y-0.5">
+                    <p className="text-xs text-ink/70">{plan.validity}</p>
+                    <p className="text-xs text-ink/70">
+                      {plan.classesIncluded === 0 ? '∞ Unlimited Classes' : (plan.type === 'credit-based' ? `${plan.creditsIncluded} Total Credits` : `${plan.classesIncluded} Classes`)}
+                    </p>
+                    <p className="text-xs text-ink/70">
+                      Type: <span className="capitalize">{plan.type?.replace('-', ' ')}</span>
+                      {plan.type === 'subscription' && plan.billingCycle !== 'none' && ` (${plan.billingCycle})`}
+                    </p>
+                  </div>
                   {plan.dailyBookingLimit > 0 && (
-                    <p className="text-[9px] font-bold text-coral uppercase tracking-tighter">Max {plan.dailyBookingLimit} bookings/day</p>
+                    <p className="text-[9px] font-bold text-coral uppercase tracking-tighter mt-1">Max {plan.dailyBookingLimit} bookings/day</p>
                   )}
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-ocean">AED {plan.price}</p>
-                  {plan.b2bPrice && <p className="text-xs font-bold text-indigo-500">B2B: AED {plan.b2bPrice}</p>}
+                <div className="text-left sm:text-right mt-2 sm:mt-0 bg-slate-50 sm:bg-transparent p-3 sm:p-0 rounded-xl sm:rounded-none w-full sm:w-auto">
+                  <p className="text-lg sm:text-sm font-semibold text-ocean">AED {plan.price}</p>
+                  {plan.b2bPrice && <p className="text-xs font-bold text-indigo-500 mt-0.5">B2B: AED {plan.b2bPrice}</p>}
                 </div>
               </div>
-              <div className="mt-3 flex gap-3">
+              <div className="mt-4 pt-4 border-t border-slate-100/50 flex flex-wrap gap-2">
                 {canEdit && (
                   <button
-                    className="rounded-full border border-ink/10 px-3 py-1 text-xs font-semibold"
+                    className="flex-1 sm:flex-none text-center justify-center rounded-lg sm:rounded-full border border-ink/10 px-4 py-2 sm:py-1 text-xs font-semibold hover:bg-slate-50 transition-colors"
                     onClick={() => handleEdit(plan)}
                   >
                     Edit
@@ -848,7 +850,7 @@ export default function PricingManagement() {
                 )}
                 {canToggle && (
                   <button
-                    className={`rounded-full px-4 py-1 text-xs font-semibold transition-all ${plan.status === 'active' ? 'bg-red-50 text-red-400 border border-red-100 hover:bg-red-100' : 'bg-green-50 text-green-500 border border-green-100 hover:bg-green-100'}`}
+                    className={`flex-1 sm:flex-none text-center justify-center rounded-lg sm:rounded-full px-4 py-2 sm:py-1 text-xs font-semibold transition-all ${plan.status === 'active' ? 'bg-red-50 text-red-400 border border-red-100 hover:bg-red-100' : 'bg-green-50 text-green-500 border border-green-100 hover:bg-green-100'}`}
                     onClick={() => handleToggleStatus(plan)}
                   >
                     {plan.status === 'active' ? 'Disable' : 'Enable'}

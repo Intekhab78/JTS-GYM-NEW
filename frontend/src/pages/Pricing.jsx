@@ -439,54 +439,59 @@ export default function Pricing() {
   return (
     <div>
       <Navbar />
-      <main className="page-shell pb-12 pt-8">
-        <section className="relative overflow-hidden rounded-[32px] bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-500 p-8 text-white shadow-glow">
+      <main className="page-shell pb-12 pt-4 md:pt-8">
+        <section className="relative overflow-hidden rounded-3xl md:rounded-[32px] bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-500 p-5 md:p-8 text-white shadow-glow">
           <div className="relative z-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/80">Pricing</p>
-            <h1 className="mt-3 font-display text-3xl md:text-4xl">Other class options</h1>
-            <p className="mt-2 max-w-2xl text-sm text-white/80">
+            <p className="text-[10px] md:text-xs font-semibold uppercase tracking-[0.3em] text-white/80">Pricing</p>
+            <h1 className="mt-2 md:mt-3 font-display text-3xl md:text-4xl">Other class options</h1>
+            <p className="mt-2 max-w-2xl text-xs md:text-sm text-white/80">
               Baby classes · Ballet · Combat sports · Fitness. Transparent packages with playful perks.
             </p>
           </div>
-          <div className="relative z-10 mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl bg-white/15 p-4 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.2em] text-white/70">Drop-ins</p>
-              <p className="mt-2 text-xl font-semibold">From {minDropIn} {currency}</p>
+          <div className="relative z-10 mt-4 md:mt-6 grid gap-2 md:gap-3 grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl md:rounded-2xl bg-white/15 p-3 md:p-4 backdrop-blur">
+              <p className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-white/70">Drop-ins</p>
+              <p className="mt-1 md:mt-2 text-sm md:text-xl font-semibold">From {minDropIn} {currency}</p>
             </div>
-            <div className="rounded-2xl bg-white/15 p-4 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.2em] text-white/70">Bundles</p>
-              <p className="mt-2 text-xl font-semibold">Save 15%</p>
+            <div className="rounded-xl md:rounded-2xl bg-white/15 p-3 md:p-4 backdrop-blur">
+              <p className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-white/70">Bundles</p>
+              <p className="mt-1 md:mt-2 text-sm md:text-xl font-semibold">Save 15%</p>
             </div>
-            <div className="rounded-2xl bg-white/15 p-4 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.2em] text-white/70">Freebies</p>
-              <p className="mt-2 text-xl font-semibold">Gym access</p>
+            <div className="rounded-xl md:rounded-2xl bg-white/15 p-3 md:p-4 backdrop-blur">
+              <p className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-white/70">Freebies</p>
+              <p className="mt-1 md:mt-2 text-sm md:text-xl font-semibold">Gym access</p>
             </div>
-            <div className="rounded-2xl bg-white/15 p-4 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.2em] text-white/70">Coaching</p>
-              <p className="mt-2 text-xl font-semibold">Progress notes</p>
+            <div className="rounded-xl md:rounded-2xl bg-white/15 p-3 md:p-4 backdrop-blur">
+              <p className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-white/70">Coaching</p>
+              <p className="mt-1 md:mt-2 text-sm md:text-xl font-semibold">Progress notes</p>
             </div>
           </div>
           <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/15" />
           <div className="pointer-events-none absolute -bottom-16 left-10 h-44 w-44 rounded-full bg-white/10" />
         </section>
 
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-ink/30 uppercase tracking-widest px-2">Location:</span>
-            <LocationPicker compact />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-ink/30 uppercase tracking-widest px-2">Category:</span>
-            <select
-              className="bg-slate-100 border-none rounded-full py-2 px-4 text-xs font-bold text-ink/70 focus:ring-2 focus:ring-brand-blue/20 outline-none cursor-pointer"
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-            >
-              <option value="All">All Categories</option>
-              {categories.map(cat => (
-                <option key={cat._id} value={cat._id}>{cat.name}</option>
-              ))}
-            </select>
+        <div className="mt-4 md:mt-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 md:p-6 rounded-3xl md:rounded-[32px] bg-white border border-slate-100 shadow-sm transition-all hover:shadow-md">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-slate-50 sm:bg-transparent p-2 sm:p-0 rounded-xl sm:rounded-none">
+              <span className="text-[10px] md:text-xs font-bold text-ink/30 uppercase tracking-widest pl-1 sm:pl-0 self-start sm:self-center mt-1 sm:mt-0">Location:</span>
+              <div className="w-full sm:w-auto">
+                <LocationPicker compact />
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between sm:justify-start gap-3 bg-slate-50 sm:bg-transparent p-2 sm:p-0 rounded-xl sm:rounded-none">
+              <span className="text-[10px] md:text-xs font-bold text-ink/30 uppercase tracking-widest pl-1 sm:pl-0">Category:</span>
+              <select
+                className="bg-white sm:bg-slate-50 border-none rounded-lg md:rounded-2xl py-1.5 px-2 md:py-3 md:px-4 text-[11px] md:text-sm font-bold text-ink/70 focus:ring-2 focus:ring-brand-blue/20 outline-none cursor-pointer flex-1 sm:flex-none text-right sm:text-left"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                <option value="All">All Categories</option>
+                {categories.map(cat => (
+                  <option key={cat._id} value={cat._id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 

@@ -154,7 +154,7 @@ export default function Schedule() {
       <Navbar />
 
       {/* Immersive Hero Section */}
-      <section className="relative overflow-hidden pt-12 pb-12 md:pt-16 md:pb-16">
+      <section className="relative overflow-hidden pt-6 pb-6 md:pt-16 md:pb-16">
         {/* Animated Mesh Gradients */}
         <div className="absolute inset-0 -z-10 bg-slate-50">
           <div className="absolute top-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-ocean/10 blur-[100px] animate-floaty"></div>
@@ -165,23 +165,25 @@ export default function Schedule() {
           <div className="inline-block rounded-full bg-white/80 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.3em] text-ocean backdrop-blur-sm border border-white/50 animate-rise">
             Weekly Rhythm
           </div>
-          <h1 className="mt-4 font-display text-4xl md:text-6xl font-black text-brand-blue leading-tight animate-rise" style={{ animationDelay: '0.1s' }}>
+          <h1 className="mt-2 md:mt-4 font-display text-3xl md:text-6xl font-black text-brand-blue leading-tight animate-rise" style={{ animationDelay: '0.1s' }}>
             Class <span className="text-transparent bg-clip-text bg-gradient-to-r from-ocean to-coral">Schedule</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-lg text-ink/60 font-medium animate-rise" style={{ animationDelay: '0.2s' }}>
+          <p className="mx-auto mt-2 md:mt-4 max-w-2xl text-sm md:text-lg text-ink/60 font-medium animate-rise" style={{ animationDelay: '0.2s' }}>
             Find the perfect slot for your mini-athlete. Select your favorite branch and explore the sessions.
           </p>
 
-           <div className="mt-8 flex flex-col md:flex-row items-center justify-center gap-4 animate-rise" style={{ animationDelay: '0.3s' }}>
-            <div className="p-1 px-4 bg-white/70 backdrop-blur-xl rounded-full border border-white shadow-low inline-flex items-center gap-4">
-              <span className="text-xs font-bold text-ink/40 uppercase tracking-widest ml-2">Location:</span>
-              <LocationPicker compact />
+           <div className="mt-6 md:mt-8 flex flex-col md:flex-row items-stretch md:items-center justify-center gap-3 md:gap-4 animate-rise px-2 md:px-0" style={{ animationDelay: '0.3s' }}>
+            <div className="w-full md:w-auto p-1.5 px-2 md:px-4 bg-white/70 backdrop-blur-xl rounded-[20px] md:rounded-full border border-white shadow-low flex flex-col sm:flex-row items-center gap-2 overflow-hidden">
+              <span className="text-[10px] md:text-xs font-bold text-ink/40 uppercase tracking-widest sm:ml-2 mt-1 sm:mt-0">Location:</span>
+              <div className="w-full sm:w-auto overflow-hidden">
+                <LocationPicker compact />
+              </div>
             </div>
 
-            <div className="p-1 px-4 bg-white/70 backdrop-blur-xl rounded-full border border-white shadow-low inline-flex items-center gap-4">
-              <span className="text-xs font-bold text-ink/40 uppercase tracking-widest ml-2">Category:</span>
+            <div className="w-full md:w-auto p-1.5 px-3 md:px-4 bg-white/70 backdrop-blur-xl rounded-2xl md:rounded-full border border-white shadow-low flex items-center justify-between sm:justify-start gap-4">
+              <span className="text-[10px] md:text-xs font-bold text-ink/40 uppercase tracking-widest ml-1 sm:ml-2">Category:</span>
               <select 
-                className="bg-transparent border-none py-2 text-xs font-bold text-ink/70 focus:ring-0 outline-none cursor-pointer"
+                className="bg-transparent border-none py-1.5 md:py-2 text-[11px] md:text-xs font-bold text-ink/70 focus:ring-0 outline-none cursor-pointer flex-1 sm:flex-none text-right sm:text-left"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
@@ -192,31 +194,33 @@ export default function Schedule() {
               </select>
             </div>
 
-            <div className="group relative w-full max-w-xs">
-              <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                <svg className="h-4 w-4 text-ink/30 group-focus-within:text-brand-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="group relative w-full max-w-none md:max-w-xs flex-1">
+                <div className="absolute inset-y-0 left-3 md:left-4 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-ink/30 group-focus-within:text-brand-blue transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search classes or coaches..."
+                  className="w-full bg-white/70 backdrop-blur-xl border border-white rounded-2xl md:rounded-full py-2.5 pl-9 pr-3 md:pl-10 md:pr-4 text-xs font-bold focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-low"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-              <input
-                type="text"
-                placeholder="Search classes or coaches..."
-                className="w-full bg-white/70 backdrop-blur-xl border border-white rounded-full py-2.5 pl-10 pr-4 text-xs font-bold focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-low"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
 
-            <button
-               onClick={() => {
-                 navigator.clipboard.writeText(window.location.href);
-                 toast.success('Schedule link copied!');
-               }}
-               className="p-3.5 bg-white/70 backdrop-blur-xl border border-white rounded-full text-ocean hover:text-brand-blue hover:bg-white shadow-low hover:shadow-md transition-all active:scale-95"
-               title="Share Schedule"
-            >
-               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-            </button>
+              <button
+                 onClick={() => {
+                   navigator.clipboard.writeText(window.location.href);
+                   toast.success('Schedule link copied!');
+                 }}
+                 className="p-3 md:p-3.5 shrink-0 bg-white/70 backdrop-blur-xl border border-white rounded-2xl md:rounded-full text-ocean hover:text-brand-blue hover:bg-white shadow-low hover:shadow-md transition-all active:scale-95"
+                 title="Share Schedule"
+              >
+                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </section>

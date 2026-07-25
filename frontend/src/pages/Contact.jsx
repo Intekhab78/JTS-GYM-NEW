@@ -59,20 +59,24 @@ export default function Contact() {
   return (
     <div>
       <Navbar />
-      <main className="page-shell py-12">
+      <main className="page-shell pt-6 pb-12 md:py-12">
         <SectionTitle
           kicker="Contact"
           title="Let us plan their first class"
           subtitle="Share your details and we will schedule a tour within 24 hours."
         />
-        <div className="mb-6">
-          <LocationPicker compact />
+        
+        <div className="mt-4 md:mt-8 mb-6 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-3 md:p-6 rounded-3xl md:rounded-[32px] bg-white border border-slate-100 shadow-sm transition-all overflow-hidden">
+          <span className="text-[10px] md:text-xs font-bold text-ink/30 uppercase tracking-widest pl-2 sm:pl-0 self-start sm:self-center mt-1 sm:mt-0 shrink-0">Select Branch:</span>
+          <div className="w-full sm:w-auto overflow-hidden">
+            <LocationPicker compact />
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <form className="grid gap-4 rounded-3xl bg-white/80 p-6 shadow-glow" onSubmit={handleSubmit}>
+          <form className="grid gap-3 md:gap-4 rounded-3xl bg-white/80 p-4 md:p-6 shadow-glow" onSubmit={handleSubmit}>
             <input 
-              className="rounded-xl border border-orange-200/70 p-3" 
+              className="rounded-xl border border-orange-200/70 p-3 text-sm md:text-base" 
               placeholder="Parent name"
               name="name"
               value={form.name}
@@ -80,7 +84,7 @@ export default function Contact() {
               required
             />
             <input 
-              className="rounded-xl border border-orange-200/70 p-3" 
+              className="rounded-xl border border-orange-200/70 p-3 text-sm md:text-base" 
               placeholder="Email"
               name="email"
               type="email"
@@ -89,16 +93,16 @@ export default function Contact() {
               required
             />
             <input 
-              className="rounded-xl border border-orange-200/70 p-3" 
+              className="rounded-xl border border-orange-200/70 p-3 text-sm md:text-base" 
               placeholder="Phone"
               name="phone"
               value={form.phone}
               onChange={handleChange}
             />
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
               <select
-                className="rounded-xl border border-orange-200/70 p-3 text-ink/70"
+                className="rounded-xl border border-orange-200/70 p-3 text-xs md:text-sm text-ink/70"
                 name="interestedClassId"
                 value={form.interestedClassId}
                 onChange={handleChange}
@@ -110,7 +114,7 @@ export default function Contact() {
               </select>
 
               <select
-                className="rounded-xl border border-orange-200/70 p-3 text-ink/70"
+                className="rounded-xl border border-orange-200/70 p-3 text-xs md:text-sm text-ink/70"
                 name="interestedPlanId"
                 value={form.interestedPlanId}
                 onChange={handleChange}
@@ -123,7 +127,7 @@ export default function Contact() {
             </div>
 
             <textarea
-              className="min-h-[120px] rounded-xl border border-orange-200/70 p-3"
+              className="min-h-[100px] md:min-h-[120px] rounded-xl border border-orange-200/70 p-3 text-sm md:text-base"
               placeholder="Tell us about your child"
               name="message"
               value={form.message}

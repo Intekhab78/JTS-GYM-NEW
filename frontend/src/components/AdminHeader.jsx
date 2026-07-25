@@ -35,11 +35,11 @@ export default function AdminHeader({ title, description, actions }) {
   };
 
   return (
-    <section className={`relative overflow-hidden rounded-[32px] p-8 text-white shadow-glow mb-8 transition-all duration-500 ${isLive ? 'bg-gradient-to-r from-ocean to-moss' : 'bg-gradient-to-r from-amber-600 to-orange-500'}`}>
+    <section className={`relative overflow-hidden rounded-3xl md:rounded-[32px] p-5 md:p-8 text-white shadow-glow mb-4 md:mb-8 transition-all duration-500 ${isLive ? 'bg-gradient-to-r from-ocean to-moss' : 'bg-gradient-to-r from-amber-600 to-orange-500'}`}>
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/80">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-2 md:mb-3">
+            <p className="text-[10px] md:text-xs font-semibold uppercase tracking-[0.3em] text-white/80">
               {roleName} Center
             </p>
             {user?.role === 'superadmin' && (
@@ -80,7 +80,7 @@ export default function AdminHeader({ title, description, actions }) {
               </>
             )}
           </div>
-          <h1 className="mt-1 font-display text-3xl md:text-4xl capitalize">
+          <h1 className="mt-1 font-display text-2xl md:text-4xl capitalize">
             {roleName} {title}
           </h1>
           <p className="mt-2 text-sm text-white/80 max-w-2xl">{description}</p>
