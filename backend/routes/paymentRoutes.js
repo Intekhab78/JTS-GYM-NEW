@@ -1,6 +1,6 @@
 import express from 'express';
 import { getMyPayments, getAllPayments, createPayment, createBookingPayment, exportPaymentsCsv } from '../controllers/paymentController.js';
-import { createOrder, getRazorpayKey, handleWebhook } from '../controllers/razorpayController.js';
+import { getGatewayConfig, createOrder, handleWebhook } from '../controllers/paymentGatewayController.js';
 import { protect, adminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -11,9 +11,9 @@ router.get('/export/csv', protect, adminOnly, exportPaymentsCsv);
 router.post('/', protect, createPayment);
 router.post('/booking', protect, createBookingPayment);
 
-// Razorpay endpoints
-router.get('/razorpay/key', getRazorpayKey);
-router.post('/razorpay/order', createOrder);
-router.post('/razorpay/webhook', handleWebhook);
+// Gateway endpoints (dynamically handles Razorpay, etc.)
+router.get('/gateway/config', getGatewayConfig);
+router.post('/gateway/order', createOrder);
+router.post('/gateway/webhook', handleWebhook);
 
 export default router;

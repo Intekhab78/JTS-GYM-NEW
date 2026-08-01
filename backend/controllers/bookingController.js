@@ -22,7 +22,7 @@ import { calculateTax } from '../utils/taxCalculator.js';
 import Coupon from '../models/Coupon.js';
 import { withUAT } from '../middleware/uatMiddleware.js';
 import { getTransactionSnapshots } from '../utils/snapshotUtils.js';
-import { verifySignature } from './razorpayController.js';
+import PaymentFactory from '../services/payment/PaymentFactory.js';
 
 
 export const getMyBookings = asyncHandler(async (req, res) => {
@@ -909,13 +909,23 @@ export const createGroupBooking = asyncHandler(async (req, res) => {
   if (!participants?.length || !resolvedSessionIds?.length) throw new Error('Missing details');
 
   if (paymentMethod === 'online') {
-    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
-    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature, paymentId, orderId, signature } = req.body;
+    const finalPaymentId = razorpay_payment_id || paymentId;
+    const finalOrderId = razorpay_order_id || orderId;
+    const finalSignature = razorpay_signature || signature;
+
+    if (!finalPaymentId || !finalOrderId) {
+      console.error('Missing payment details. req.body:', req.body);
       res.status(400);
-      throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
+      throw new Error(`Payment details (payment ID, order ID) are required for online payments. If this persists, please contact support.`);
     }
 
-    const isValid = await verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    const gateway = await PaymentFactory.getGateway();
+    const isValid = await gateway.verifyPayment({
+      orderId: finalOrderId,
+      paymentId: finalPaymentId,
+      signature: finalSignature
+    });
     if (!isValid) {
       res.status(400);
       throw new Error('Payment signature verification failed. Transaction was not verified.');

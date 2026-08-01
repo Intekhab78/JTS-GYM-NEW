@@ -1008,7 +1008,7 @@ export default function BookingFlow() {
                           <input
                             type="number"
                             placeholder="Age"
-                            className={`w-full bg-white border-none rounded-2xl py-3 px-5 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all ${p.age && (
+                            className={`w-full bg-white border-none rounded-2xl py-3 px-5 text-sm font-bold text-ink focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all ${p.age && selectedClass && (
                                 (selectedClass.minAge !== undefined && parseInt(p.age) < selectedClass.minAge) ||
                                 (selectedClass.maxAge !== undefined && parseInt(p.age) > selectedClass.maxAge)
                               ) ? 'ring-2 ring-red-400 bg-red-50' : ''
@@ -1017,10 +1017,10 @@ export default function BookingFlow() {
                             onChange={(e) => updateParticipant(idx, 'age', e.target.value)}
                             disabled={p.childId}
                           />
-                          {p.age && selectedClass.minAge !== undefined && parseInt(p.age) < selectedClass.minAge && (
+                          {p.age && selectedClass && selectedClass.minAge !== undefined && parseInt(p.age) < selectedClass.minAge && (
                             <p className="text-[8px] font-bold text-red-500 mt-1 px-1">Too young</p>
                           )}
-                          {p.age && selectedClass.maxAge !== undefined && parseInt(p.age) > selectedClass.maxAge && (
+                          {p.age && selectedClass && selectedClass.maxAge !== undefined && parseInt(p.age) > selectedClass.maxAge && (
                             <p className="text-[8px] font-bold text-red-500 mt-1 px-1">Too old</p>
                           )}
                         </div>
