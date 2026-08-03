@@ -54,7 +54,7 @@ import brandRoutes from './routes/brandRoutes.js';
 import cmsRoutes from './routes/cmsRoutes.js';
 import vendorRoutes from './routes/vendorRoutes.js';
 import { initCronJobs } from './utils/cronJobs.js';
-import { handleWebhook } from './controllers/razorpayController.js';
+import { handleWebhook } from './controllers/paymentGatewayController.js';
 
 
 const app = express();

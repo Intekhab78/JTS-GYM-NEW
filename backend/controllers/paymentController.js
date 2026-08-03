@@ -11,7 +11,7 @@ import { resolveReadLocationIds } from '../utils/locationScope.js';
 import { sendPaymentConfirmationEmail } from '../utils/mailer.js';
 import { linkUserBookings } from './bookingController.js';
 import { withUAT } from '../middleware/uatMiddleware.js';
-import { verifySignature } from './razorpayController.js';
+import PaymentFactory from '../services/payment/PaymentFactory.js';
 
 
 // Internal function to heal missing Payment records for any confirmed bookings
@@ -271,7 +271,12 @@ export const createPayment = asyncHandler(async (req, res) => {
       throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
     }
 
-    const isValid = await verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    const gateway = await PaymentFactory.getGateway();
+    const isValid = await gateway.verifyPayment({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature
+    });
     if (!isValid) {
       res.status(400);
       throw new Error('Payment signature verification failed. Transaction was not verified.');
@@ -348,7 +353,12 @@ export const createBookingPayment = asyncHandler(async (req, res) => {
       throw new Error('Razorpay payment details (payment ID, order ID, signature) are required for online payments.');
     }
 
-    const isValid = await verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    const gateway = await PaymentFactory.getGateway();
+    const isValid = await gateway.verifyPayment({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature
+    });
     if (!isValid) {
       res.status(400);
       throw new Error('Payment signature verification failed. Transaction was not verified.');

@@ -38,7 +38,14 @@ export const getGlobalSettings = asyncHandler(async (req, res) => {
   const settings = await Setting.find({});
   const processedSettings = settings.map(setting => {
     const settingObj = setting.toObject();
-    if (settingObj.key === 'razorpay_settings' && settingObj.value) {
+    if (settingObj.key === 'payment_gateway_settings' && settingObj.value) {
+      ['razorpay', 'stripe', 'paypal'].forEach(provider => {
+        if (settingObj.value[provider]) {
+          if (settingObj.value[provider].keySecret) settingObj.value[provider].keySecret = '••••••••••••••••';
+          if (settingObj.value[provider].webhookSecret) settingObj.value[provider].webhookSecret = '••••••••••••••••';
+        }
+      });
+    } else if (settingObj.key === 'razorpay_settings' && settingObj.value) {
       if (settingObj.value.keySecret) {
         settingObj.value.keySecret = '••••••••••••••••';
       }
@@ -58,7 +65,23 @@ export const updateGlobalSetting = asyncHandler(async (req, res) => {
   const { key } = req.params;
   let { value, description } = req.body;
 
-  if (key === 'razorpay_settings') {
+  if (key === 'payment_gateway_settings') {
+    const existing = await Setting.findOne({ key });
+    if (existing && existing.value) {
+      const mergedValue = { ...value };
+      ['razorpay', 'stripe', 'paypal'].forEach(provider => {
+        if (mergedValue[provider] && existing.value[provider]) {
+          if (mergedValue[provider].keySecret === '••••••••••••••••') {
+            mergedValue[provider].keySecret = existing.value[provider].keySecret;
+          }
+          if (mergedValue[provider].webhookSecret === '••••••••••••••••') {
+            mergedValue[provider].webhookSecret = existing.value[provider].webhookSecret;
+          }
+        }
+      });
+      value = mergedValue;
+    }
+  } else if (key === 'razorpay_settings') {
     const existing = await Setting.findOne({ key });
     if (existing && existing.value) {
       const mergedValue = { ...value };
@@ -79,7 +102,16 @@ export const updateGlobalSetting = asyncHandler(async (req, res) => {
   );
 
   // Send back the response with masked keys to be safe
-  if (key === 'razorpay_settings' && setting.value) {
+  if (key === 'payment_gateway_settings' && setting.value) {
+    const masked = setting.toObject();
+    ['razorpay', 'stripe', 'paypal'].forEach(provider => {
+      if (masked.value[provider]) {
+        if (masked.value[provider].keySecret) masked.value[provider].keySecret = '••••••••••••••••';
+        if (masked.value[provider].webhookSecret) masked.value[provider].webhookSecret = '••••••••••••••••';
+      }
+    });
+    return res.json(masked);
+  } else if (key === 'razorpay_settings' && setting.value) {
     const masked = setting.toObject();
     if (masked.value.keySecret) masked.value.keySecret = '••••••••••••••••';
     if (masked.value.webhookSecret) masked.value.webhookSecret = '••••••••••••••••';

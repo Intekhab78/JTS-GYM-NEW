@@ -245,69 +245,78 @@ export default function Navbar({ className = '' }) {
 
       {/* Mobile "More" Drawer */}
         {isMobileMenuOpen && (
-          <div className="xl:hidden fixed inset-0 z-[60] bg-white flex flex-col animate-in slide-in-from-bottom-8 duration-300 pb-20">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100 shadow-sm z-10">
-               <span className="font-display text-2xl font-black text-brand-blue">Menu</span>
-               <button onClick={closeMenu} className="p-2 bg-slate-50 rounded-full text-slate-400 hover:text-ink">
-                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-               </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-2">
-               {navLinks.filter(l => !['/', '/programs', '/schedule', '/pricing'].includes(l.to)).map((link) => (
-                 <NavLink 
-                   key={link.to} 
-                   to={link.to} 
-                   onClick={closeMenu}
-                   className="text-lg font-bold text-ink hover:text-brand-blue transition-colors px-4 py-4 rounded-2xl hover:bg-slate-50"
-                 >
-                   {link.label}
+          <div className="xl:hidden fixed inset-0 z-[60] flex justify-end animate-in fade-in duration-300">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/20 backdrop-blur-sm" 
+              onClick={closeMenu}
+            ></div>
+            
+            {/* Drawer Panel */}
+            <div className="relative w-[70%] sm:w-1/2 h-full bg-white shadow-2xl flex flex-col animate-slide-in-right pb-20 z-10">
+              <div className="flex justify-between items-center p-5 border-b border-slate-100 shadow-sm shrink-0">
+                 <span className="font-display text-xl font-black text-brand-blue">Menu</span>
+                 <button onClick={closeMenu} className="p-2 bg-slate-50 rounded-full text-slate-400 hover:text-ink">
+                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                 </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-1">
+                 {navLinks.filter(l => !['/', '/programs', '/schedule', '/pricing'].includes(l.to)).map((link) => (
+                   <NavLink 
+                     key={link.to} 
+                     to={link.to} 
+                     onClick={closeMenu}
+                     className="text-base font-bold text-ink hover:text-brand-blue transition-colors px-4 py-3 rounded-xl hover:bg-slate-50"
+                   >
+                     {link.label}
+                   </NavLink>
+                 ))}
+                 <NavLink to="/booking" onClick={closeMenu} className="text-base font-bold text-brand-blue px-4 py-3 rounded-xl bg-brand-blue/5 mt-2 text-center">
+                   Book Trial
                  </NavLink>
-               ))}
-               <NavLink to="/booking" onClick={closeMenu} className="text-lg font-bold text-brand-blue px-4 py-4 rounded-2xl bg-brand-blue/5 mt-4">
-                 Book Trial
-               </NavLink>
 
-               {user && isUATGlobal && (user.allowUAT || user.role === 'superadmin') && (
-                 <div className="mt-8 px-4 py-4 bg-slate-50 rounded-3xl">
-                   <p className="text-[10px] font-black text-ink/40 uppercase tracking-widest mb-3">Environment Mode</p>
-                   <div className="flex items-center bg-white rounded-2xl p-1 border border-slate-100 shadow-sm">
-                     <button
-                       onClick={() => {
-                         localStorage.setItem('systemMode', 'live');
-                         window.location.reload();
-                       }}
-                       className={`flex-1 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                         (localStorage.getItem('systemMode') || 'live') === 'live'
-                           ? 'bg-brand-blue text-white shadow-sm'
-                           : 'text-ink/40'
-                       }`}
-                     >
-                       Live
-                     </button>
-                     <button
-                       onClick={() => {
-                         localStorage.setItem('systemMode', 'uat');
-                         window.location.reload();
-                       }}
-                       className={`flex-1 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                         localStorage.getItem('systemMode') === 'uat'
-                           ? 'bg-amber-500 text-white shadow-sm'
-                           : 'text-ink/40'
-                       }`}
-                     >
-                       UAT
-                     </button>
+                 {user && isUATGlobal && (user.allowUAT || user.role === 'superadmin') && (
+                   <div className="mt-6 px-3 py-3 bg-slate-50 rounded-2xl">
+                     <p className="text-[9px] font-black text-ink/40 uppercase tracking-widest mb-2">Environment Mode</p>
+                     <div className="flex items-center bg-white rounded-xl p-1 border border-slate-100 shadow-sm">
+                       <button
+                         onClick={() => {
+                           localStorage.setItem('systemMode', 'live');
+                           window.location.reload();
+                         }}
+                         className={`flex-1 px-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                           (localStorage.getItem('systemMode') || 'live') === 'live'
+                             ? 'bg-brand-blue text-white shadow-sm'
+                             : 'text-ink/40'
+                         }`}
+                       >
+                         Live
+                       </button>
+                       <button
+                         onClick={() => {
+                           localStorage.setItem('systemMode', 'uat');
+                           window.location.reload();
+                         }}
+                         className={`flex-1 px-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                           localStorage.getItem('systemMode') === 'uat'
+                             ? 'bg-amber-500 text-white shadow-sm'
+                             : 'text-ink/40'
+                         }`}
+                       >
+                         UAT
+                       </button>
+                     </div>
                    </div>
-                 </div>
-               )}
-               {user && (
-                 <div className="mt-8 border-t border-slate-100 pt-6 flex flex-col gap-2">
-                   <p className="text-[10px] font-black text-ink/40 uppercase tracking-widest px-4 mb-2">My Account</p>
-                   <NavLink to={dashboardPath} onClick={closeMenu} className="text-lg font-bold text-ink hover:text-brand-blue transition-colors px-4 py-4 rounded-2xl hover:bg-slate-50">Dashboard</NavLink>
-                   <NavLink to="/profile" onClick={closeMenu} className="text-lg font-bold text-ink hover:text-brand-blue transition-colors px-4 py-4 rounded-2xl hover:bg-slate-50">My Profile</NavLink>
-                   <button onClick={handleLogout} className="text-lg font-bold text-rose-500 px-4 py-4 text-left rounded-2xl hover:bg-rose-50 transition-colors">Logout</button>
-                 </div>
-               )}
+                 )}
+                 {user && (
+                   <div className="mt-4 border-t border-slate-100 pt-4 flex flex-col gap-1">
+                     <p className="text-[9px] font-black text-ink/40 uppercase tracking-widest px-4 mb-1">My Account</p>
+                     <NavLink to={dashboardPath} onClick={closeMenu} className="text-base font-bold text-ink hover:text-brand-blue transition-colors px-4 py-3 rounded-xl hover:bg-slate-50">Dashboard</NavLink>
+                     <NavLink to="/profile" onClick={closeMenu} className="text-base font-bold text-ink hover:text-brand-blue transition-colors px-4 py-3 rounded-xl hover:bg-slate-50">My Profile</NavLink>
+                     <button onClick={handleLogout} className="text-base font-bold text-rose-500 px-4 py-3 text-left rounded-xl hover:bg-rose-50 transition-colors">Logout</button>
+                   </div>
+                 )}
+              </div>
             </div>
           </div>
         )}
@@ -340,6 +349,17 @@ export default function Navbar({ className = '' }) {
           body {
             padding-bottom: 72px;
           }
+        }
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+          }
+          to {
+            transform: translateX(0);
+          }
+        }
+        .animate-slide-in-right {
+          animation: slideInRight 0.3s ease-out forwards;
         }
       `}</style>
     </>

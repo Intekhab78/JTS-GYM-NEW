@@ -28,9 +28,7 @@ export default function SystemSettings() {
   const [inputValues, setInputValues] = useState({});
   const [globalSettings, setGlobalSettings] = useState({});
   const [companyInfo, setCompanyInfo] = useState(defaultCompanyInfo);
-  const [razorpayInfo, setRazorpayInfo] = useState({ keyId: '', keySecret: '', webhookSecret: '' });
-  const [showKeySecret, setShowKeySecret] = useState(false);
-  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+
   const [isSaving, setIsSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   
@@ -57,13 +55,7 @@ export default function SystemSettings() {
         setCompanyInfo({ ...defaultCompanyInfo, ...settingsMap.company_info });
       }
 
-      if (settingsMap.razorpay_settings) {
-        setRazorpayInfo({
-          keyId: settingsMap.razorpay_settings.keyId || '',
-          keySecret: settingsMap.razorpay_settings.keySecret || '',
-          webhookSecret: settingsMap.razorpay_settings.webhookSecret || ''
-        });
-      }
+
     } catch (err) {
       toast.error('Failed to load system settings');
     } finally {
@@ -155,28 +147,7 @@ export default function SystemSettings() {
     }
   };
 
-  const handleSaveRazorpayInfo = async (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    try {
-      const res = await api.put('/settings/global/razorpay_settings', { 
-        value: razorpayInfo,
-        description: 'Razorpay Online Payment Integration Keys'
-      });
-      toast.success('Razorpay credentials saved successfully');
-      if (res.data && res.data.value) {
-        setRazorpayInfo({
-          keyId: res.data.value.keyId || '',
-          keySecret: res.data.value.keySecret || '',
-          webhookSecret: res.data.value.webhookSecret || ''
-        });
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to save Razorpay credentials');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+
 
   const logoPreview = companyInfo.logoUrl ? (
     getImageUrl(companyInfo.logoUrl)
@@ -441,82 +412,6 @@ export default function SystemSettings() {
             </div>
           </section>
 
-          {/* Razorpay Payment Integration Section */}
-          <section className="soft-card rounded-[40px] p-8 border-2 border-slate-50 bg-white/80 backdrop-blur-sm">
-            <div className="flex items-center gap-4 mb-8">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-2xl">
-                💳
-              </div>
-              <div>
-                <h2 className="text-2xl font-display text-ink">Razorpay Payment Integration</h2>
-                <p className="text-sm text-ink/40">Configure Razorpay credentials dynamically for billing and checkout payments</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveRazorpayInfo} className="grid gap-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-ink/30 uppercase px-1">Razorpay Key ID</label>
-                  <input 
-                    className="w-full rounded-2xl border-2 border-slate-100 p-3 outline-none focus:border-brand-blue"
-                    value={razorpayInfo.keyId}
-                    onChange={(e) => setRazorpayInfo({...razorpayInfo, keyId: e.target.value})}
-                    placeholder="rzp_test_..."
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-ink/30 uppercase px-1">Razorpay Key Secret</label>
-                  <div className="relative">
-                    <input 
-                      className="w-full rounded-2xl border-2 border-slate-100 p-3 pr-10 outline-none focus:border-brand-blue"
-                      type={showKeySecret ? 'text' : 'password'}
-                      value={razorpayInfo.keySecret}
-                      onChange={(e) => setRazorpayInfo({...razorpayInfo, keySecret: e.target.value})}
-                      placeholder="••••••••••••••••"
-                      required
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => setShowKeySecret(!showKeySecret)}
-                      className="absolute right-3 top-3.5 text-ink/30 hover:text-ink/60 text-xs font-black uppercase tracking-wider"
-                    >
-                      {showKeySecret ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-ink/30 uppercase px-1">Razorpay Webhook Secret</label>
-                <div className="relative">
-                  <input 
-                    className="w-full rounded-2xl border-2 border-slate-100 p-3 pr-10 outline-none focus:border-brand-blue"
-                    type={showWebhookSecret ? 'text' : 'password'}
-                    value={razorpayInfo.webhookSecret}
-                    onChange={(e) => setRazorpayInfo({...razorpayInfo, webhookSecret: e.target.value})}
-                    placeholder="••••••••••••••••"
-                    required
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowWebhookSecret(!showWebhookSecret)}
-                    className="absolute right-3 top-3.5 text-ink/30 hover:text-ink/60 text-xs font-black uppercase tracking-wider"
-                  >
-                    {showWebhookSecret ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-              </div>
-
-              <button 
-                type="submit"
-                disabled={isSaving}
-                className="mt-2 bg-indigo-600 text-white font-black uppercase tracking-widest text-xs px-8 py-4 rounded-2xl shadow-lg hover:shadow-indigo-200 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
-              >
-                {isSaving ? 'Saving...' : 'Save Razorpay Credentials'}
-              </button>
-            </form>
-          </section>
 
           {/* Feature Toggles Section */}
           <section className="soft-card rounded-[40px] p-8 border-2 border-slate-50 bg-white/80 backdrop-blur-sm">
