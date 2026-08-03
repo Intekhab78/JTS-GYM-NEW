@@ -24,9 +24,11 @@ export default function BookingManagement() {
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showForceRefundModal, setShowForceRefundModal] = useState(false);
   const [rejectingBookingId, setRejectingBookingId] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [sendingReminderId, setSendingReminderId] = useState(null);
+  const [forcingRefundId, setForcingRefundId] = useState(null);
 
   // Customer Profile Modal (Simplified)
   const [viewingUser, setViewingUser] = useState(null);
@@ -316,6 +318,26 @@ export default function BookingManagement() {
       setSendingReminderId(null);
     }
   };
+
+  const handleForceRefund = (bookingId) => {
+    setForcingRefundId(bookingId);
+    setShowForceRefundModal(true);
+  };
+
+  const confirmForceRefund = async () => {
+    if (!forcingRefundId) return;
+    try {
+      await api.put(`/bookings/${forcingRefundId}/force-refund`);
+      toast.success('Booking force refunded successfully!');
+      silentLoad();
+      setShowForceRefundModal(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to force refund');
+    } finally {
+      setForcingRefundId(null);
+    }
+  };
+
 
   const formatPaymentMethod = (method) => {
     if (!method) return 'N/A';
@@ -652,7 +674,7 @@ export default function BookingManagement() {
                         Refunded
                       </span>
                     )}
-                    {booking.status === 'confirmed' && (
+                    {booking.status === 'confirmed' && new Date(booking.sessionId?.startTime || booking.date) > new Date() && (
                       <button
                         onClick={() => handleSendReminder(booking)}
                         disabled={sendingReminderId === booking._id}
@@ -666,6 +688,22 @@ export default function BookingManagement() {
                           </svg>
                         )}
                         {sendingReminderId === booking._id ? 'Sending...' : 'Send Reminder'}
+                      </button>
+                    )}
+                    {canEdit && (booking.paymentStatus === 'completed' || booking.status === 'confirmed') && new Date(booking.sessionId?.startTime || booking.date) < new Date() && booking.refundStatus !== 'refunded' && (
+                      <button
+                        onClick={() => handleForceRefund(booking._id)}
+                        disabled={forcingRefundId === booking._id}
+                        className="mb-2 text-[9px] font-black uppercase tracking-widest text-coral hover:text-coral/70 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                      >
+                        {forcingRefundId === booking._id ? (
+                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                          </svg>
+                        )}
+                        {forcingRefundId === booking._id ? 'Refunding...' : 'Force Refund'}
                       </button>
                     )}
                     <div className="w-full xl:w-auto flex flex-col xl:items-end">
@@ -1208,6 +1246,42 @@ export default function BookingManagement() {
             <div className="p-8 border-t border-slate-100 bg-white flex justify-end shrink-0">
               <button onClick={() => setViewingChild(null)} className="px-10 py-4 rounded-2xl bg-slate-50 text-ink/40 text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all">
                 Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Force Refund Modal */}
+      {showForceRefundModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[32px] w-full max-w-sm p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h2 className="font-display text-2xl font-black text-ink">Force Refund?</h2>
+              <p className="text-sm text-ink/60 font-medium mt-2">
+                This action will instantly cancel the booking and mark it as refunded. It cannot be undone.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={confirmForceRefund}
+                className="w-full bg-red-500 text-white py-4 rounded-2xl font-black shadow-lg shadow-red-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                Yes, Force Refund
+              </button>
+              <button
+                onClick={() => {
+                  setShowForceRefundModal(false);
+                  setForcingRefundId(null);
+                }}
+                className="w-full bg-slate-50 text-ink/40 py-4 rounded-2xl font-black hover:bg-slate-100 transition-all uppercase tracking-widest text-xs"
+              >
+                Cancel
               </button>
             </div>
           </div>

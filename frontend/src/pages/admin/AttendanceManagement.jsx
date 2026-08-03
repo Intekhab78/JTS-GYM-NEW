@@ -18,6 +18,7 @@ export default function AttendanceManagement() {
     d.setHours(0,0,0,0);
     return d;
   });
+  const [searchQuery, setSearchQuery] = useState('');
   
   // States for Manual Checkin Modal
   const [showManualCheckin, setShowManualCheckin] = useState(false);
@@ -29,6 +30,7 @@ export default function AttendanceManagement() {
   const [viewRosterSession, setViewRosterSession] = useState(null);
   const [rosterAttendees, setRosterAttendees] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const [rosterSearchQuery, setRosterSearchQuery] = useState('');
   
   const { can } = usePermissions();
   const { socket } = useSocket();
@@ -123,6 +125,7 @@ export default function AttendanceManagement() {
   const handleViewRoster = (session) => {
     setViewRosterSession(session);
     setLoadingRoster(true);
+    setRosterSearchQuery('');
     
     Promise.all([
       api.get(`/bookings?sessionId=${session._id}`),
@@ -132,7 +135,7 @@ export default function AttendanceManagement() {
         const bookings = resBookings.data || [];
         const attendances = resAttendance.data || [];
         
-        const relevantBookings = bookings.filter(b => ['confirmed', 'pending', 'attended', 'completed'].includes(b.status));
+        const relevantBookings = bookings.filter(b => b.status !== 'cancelled');
         const list = [];
         relevantBookings.forEach(b => {
           b.participants.forEach(p => {
@@ -153,9 +156,12 @@ export default function AttendanceManagement() {
             
             list.push({
               id: childIdStr,
+              bookingId: b._id,
+              bookingNumber: b.bookingNumber || b.referenceId || '-',
               name: participantNameStr,
               age: p.age || p.childId?.age || '',
               status: b.status === 'attended' ? 'confirmed' : b.status,
+              paymentStatus: b.paymentStatus,
               attendanceState: attendanceState,
               packageName: b.packageInfo?.name || b.planId?.name || '',
               relation: p.relation || 'N/A'
@@ -167,8 +173,9 @@ export default function AttendanceManagement() {
         const uniqueItems = [];
         const seen = new Set();
         list.forEach(item => {
-          if (!seen.has(item.name)) {
-            seen.add(item.name);
+          const key = item.id + '-' + item.name + '-' + item.bookingId;
+          if (!seen.has(key)) {
+            seen.add(key);
             uniqueItems.push(item);
           }
         });
@@ -225,7 +232,17 @@ export default function AttendanceManagement() {
 
   const groupedSessions = useMemo(() => {
     const groups = {};
+    const lowerQuery = searchQuery ? searchQuery.toLowerCase() : '';
+
     sessions.forEach(session => {
+      if (searchQuery) {
+        const className = (session.classId?.title || '').toLowerCase();
+        const trainerName = (session.trainerId?.name || '').toLowerCase();
+        if (!className.includes(lowerQuery) && !trainerName.includes(lowerQuery)) {
+          return;
+        }
+      }
+
       const dateValue = new Date(session.startTime);
       dateValue.setHours(0,0,0,0);
       const dateStr = dateValue.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
@@ -254,7 +271,7 @@ export default function AttendanceManagement() {
     const currentGroup = groups[currentDateStr] ? [groups[currentDateStr]] : [];
 
     return currentGroup;
-  }, [sessions, currentDate]);
+  }, [sessions, currentDate, searchQuery]);
 
   const handlePrevDay = () => {
     setCurrentDate(prev => {
@@ -295,7 +312,7 @@ export default function AttendanceManagement() {
         )}
 
         <div className="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex bg-brand-blue text-white rounded-lg shadow-sm overflow-hidden">
               <button onClick={handlePrevDay} className="px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-brand-blue/90 border-r border-white/20 transition-colors">
                 &lsaquo; Previous
@@ -307,14 +324,37 @@ export default function AttendanceManagement() {
             <button onClick={handleToday} className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-ink bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm transition-colors">
               TODAY
             </button>
+            <input
+              type="date"
+              value={`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`}
+              onChange={(e) => {
+                if (e.target.value) {
+                  const [y, m, d] = e.target.value.split('-');
+                  const date = new Date();
+                  date.setFullYear(parseInt(y), parseInt(m) - 1, parseInt(d));
+                  date.setHours(0,0,0,0);
+                  setCurrentDate(date);
+                }
+              }}
+              className="px-4 py-2 text-[12px] font-bold text-ink bg-white border border-slate-200 rounded-lg shadow-sm outline-none focus:ring-2 focus:ring-brand-blue/20 h-[34px]"
+            />
           </div>
           
-          <button 
-            onClick={() => setShowManualCheckin(true)}
-            className="bg-brand-blue text-white px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest shadow-md hover:scale-105 active:scale-95 transition-all"
-          >
-            + Manual Check-in
-          </button>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <input
+              type="text"
+              placeholder="Search class or trainer..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="px-4 py-2 text-[12px] font-bold text-ink bg-white border border-slate-200 rounded-lg shadow-sm outline-none focus:ring-2 focus:ring-brand-blue/20 w-full sm:w-64 h-[34px]"
+            />
+            <button 
+              onClick={() => setShowManualCheckin(true)}
+              className="bg-brand-blue text-white px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-md hover:scale-105 active:scale-95 transition-all h-[34px] flex items-center whitespace-nowrap"
+            >
+              + Manual Check-in
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -515,7 +555,16 @@ export default function AttendanceManagement() {
                    {viewRosterSession.classId?.title} • {new Date(viewRosterSession.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                  </p>
                </div>
-               <button onClick={() => setViewRosterSession(null)} className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full bg-slate-200 text-ink/40 hover:bg-slate-300 transition text-xl">×</button>
+               <div className="flex items-center gap-4">
+                 <input
+                   type="text"
+                   placeholder="Search name or booking #..."
+                   value={rosterSearchQuery}
+                   onChange={(e) => setRosterSearchQuery(e.target.value)}
+                   className="px-4 py-2 text-[12px] font-bold text-ink bg-white border border-slate-200 rounded-lg shadow-sm outline-none focus:ring-2 focus:ring-brand-blue/20 w-48 relative z-10"
+                 />
+                 <button onClick={() => setViewRosterSession(null)} className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full bg-slate-200 text-ink/40 hover:bg-slate-300 transition text-xl">×</button>
+               </div>
             </div>
             
             <div className="p-0 max-h-[60vh] overflow-y-auto">
@@ -528,6 +577,7 @@ export default function AttendanceManagement() {
                   <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
                     <tr>
                       <th className="px-6 py-4 text-[10px] font-black text-ink/40 uppercase tracking-widest">Participant Name</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-ink/40 uppercase tracking-widest">Booking #</th>
                       <th className="px-6 py-4 text-[10px] font-black text-ink/40 uppercase tracking-widest">Age</th>
                       <th className="px-6 py-4 text-[10px] font-black text-ink/40 uppercase tracking-widest">Relation</th>
                       <th className="px-6 py-4 text-[10px] font-black text-ink/40 uppercase tracking-widest">Attendance</th>
@@ -535,12 +585,18 @@ export default function AttendanceManagement() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {rosterAttendees.map((a, i) => (
+                    {rosterAttendees
+                      .filter(a => {
+                        if (!rosterSearchQuery) return true;
+                        const q = rosterSearchQuery.toLowerCase();
+                        return a.name.toLowerCase().includes(q) || (a.bookingNumber && a.bookingNumber.toLowerCase().includes(q));
+                      })
+                      .map((a, i) => (
                       <tr key={i} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4">
                           <p className="text-sm font-bold text-ink">{a.name}</p>
-                          {a.packageName && <p className="text-[10px] text-brand-blue font-black tracking-widest mt-0.5">{a.packageName}</p>}
                         </td>
+                        <td className="px-6 py-4 text-[11px] font-black text-ink/60">{a.bookingNumber}</td>
                         <td className="px-6 py-4 text-xs font-bold text-ink/60">{a.age || '-'}</td>
                         <td className="px-6 py-4 text-xs font-bold text-ink/60">{a.relation}</td>
                         <td className="px-6 py-4">
@@ -555,7 +611,7 @@ export default function AttendanceManagement() {
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          {a.status === 'pending' ? (
+                          {(a.status === 'pending' || a.status === 'initiated' || a.status === 'failed' || a.paymentStatus === 'pending') ? (
                             <span className="bg-rose-50 text-rose-600 text-[10px] uppercase font-black px-2 py-1 rounded-md border border-rose-100">Unpaid</span>
                           ) : (
                             <span className="bg-emerald-50 text-emerald-600 text-[10px] uppercase font-black px-2 py-1 rounded-md border border-emerald-100">Confirmed</span>

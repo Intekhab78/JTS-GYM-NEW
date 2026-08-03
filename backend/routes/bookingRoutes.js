@@ -5,8 +5,9 @@ import {
   createBooking,
   updateBookingStatus,
   requestRefund,
-  deleteBooking,
   resolveRefundRequest,
+  forceRefund,
+  deleteBooking,
   lookupGuestBooking,
   createGroupBooking,
   sendReminder,
@@ -26,6 +27,7 @@ router.post('/:id/refund-request', protect, requestRefund);
 router.get('/:id/schedule', protect, getBookingSchedule);
 router.get('/:id', protect, getBookingById);
 router.put('/:id/refund-resolve', protect, adminOnly, resolveRefundRequest);
+router.put('/:id/force-refund', protect, adminOnly, forceRefund);
 router.post('/:id/reminder', protect, adminOnly, sendReminder);
 router.post('/group', protect, createGroupBooking);
 router.delete('/:id', protect, deleteBooking);
