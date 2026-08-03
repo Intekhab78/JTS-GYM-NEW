@@ -28,6 +28,7 @@ export default function TrainerDashboard() {
   const [sessionCategory, setSessionCategory] = useState('all'); // 'all', 'one-day', 'membership'
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchDate, setSearchDate] = useState('');
   const [visibleCount, setVisibleCount] = useState(20);
   const { socket } = useSocket();
 
@@ -259,7 +260,16 @@ export default function TrainerDashboard() {
           s.classId?.title?.toLowerCase().includes(query) ||
           s.locationId?.name?.toLowerCase().includes(query);
 
-        return isLocationMatch && isTimeMatch && isCategoryMatch && isSearchMatch;
+        let isDateMatch = true;
+        if (searchDate) {
+          const targetDate = new Date(searchDate);
+          targetDate.setHours(0,0,0,0);
+          const sDate = new Date(s.startTime);
+          sDate.setHours(0,0,0,0);
+          isDateMatch = sDate.getTime() === targetDate.getTime();
+        }
+
+        return isLocationMatch && isTimeMatch && isCategoryMatch && isSearchMatch && isDateMatch;
       })
       .sort((a, b) => {
         if (viewType === 'upcoming' || viewType === 'current') {
@@ -268,7 +278,7 @@ export default function TrainerDashboard() {
           return new Date(b.startTime) - new Date(a.startTime);
         }
       });
-  }, [sessions, locationFilter, viewType, now, sessionCategory]);
+  }, [sessions, locationFilter, viewType, now, sessionCategory, searchQuery, searchDate]);
 
   const filteredBookings = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -465,90 +475,82 @@ export default function TrainerDashboard() {
           {activeTab === 'schedule' && (
             <>
               {/* Sessions List — full width now, roster opens as modal */}
-              <div className="lg:col-span-3 rounded-[32px] bg-white p-8 shadow-sm border border-slate-100">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                  <div className="flex flex-col gap-4 w-full md:w-auto">
+              <div className="lg:col-span-3 rounded-[32px] bg-white p-5 md:p-8 shadow-sm border border-slate-100">
+                <div className="flex flex-col gap-6 mb-8">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <h2 className="font-display text-2xl text-ink">
                       {viewType === 'upcoming' ? 'Upcoming Sessions' : 'Session History'}
                     </h2>
-                    
-                    <div className="relative group/search">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg grayscale opacity-30 group-focus-within/search:opacity-100 transition-opacity">🔍</span>
-                      <input 
-                        type="text"
-                        placeholder="Search sessions or students..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full md:w-96 pl-12 pr-4 py-3 rounded-2xl bg-slate-50 border-none font-bold text-ink focus:ring-4 focus:ring-coral/5 transition-all outline-none"
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black uppercase text-ink/40 tracking-widest">Search</label>
+                      <div className="relative group/search">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm grayscale opacity-30 group-focus-within/search:opacity-100 transition-opacity">🔍</span>
+                        <input 
+                          type="text"
+                          placeholder="Sessions, students..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white border border-slate-200 text-sm font-bold text-ink focus:border-coral focus:ring-2 focus:ring-coral/20 transition-all outline-none shadow-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black uppercase text-ink/40 tracking-widest">Date</label>
+                      <input
+                        type="date"
+                        value={searchDate}
+                        onChange={(e) => setSearchDate(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-sm font-bold text-ink focus:border-coral focus:ring-2 focus:ring-coral/20 transition-all outline-none shadow-sm"
                       />
                     </div>
 
-                    {/* View Type Switcher */}
-                    <div className="flex bg-slate-100 p-1 rounded-xl gap-1 self-start">
-                      <button
-                        onClick={() => setViewType('current')}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${viewType === 'current' ? 'bg-white text-emerald-500 shadow-sm' : 'text-ink/30 hover:text-ink/60'}`}
-                      >
-                        Current
-                      </button>
-                      <button
-                        onClick={() => setViewType('upcoming')}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${viewType === 'upcoming' ? 'bg-white text-coral shadow-sm' : 'text-ink/30 hover:text-ink/60'}`}
-                      >
-                        Upcoming
-                      </button>
-                      <button
-                        onClick={() => setViewType('past')}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${viewType === 'past' ? 'bg-white text-coral shadow-sm' : 'text-ink/30 hover:text-ink/60'}`}
-                      >
-                        Past
-                      </button>
-                      <button
-                        onClick={() => setViewType('cancelled')}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${viewType === 'cancelled' ? 'bg-white text-coral shadow-sm' : 'text-ink/30 hover:text-ink/60'}`}
-                      >
-                        Cancelled
-                      </button>
-                    </div>
-
-                    {/* Session Type Filter */}
-                    <div className="flex bg-slate-100 p-1 rounded-xl gap-1 self-start">
-                      <button
-                        onClick={() => setSessionCategory('all')}
-                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${sessionCategory === 'all' ? 'bg-white text-indigo-600 shadow-sm' : 'text-ink/30 hover:text-ink/60'}`}
-                      >
-                        📂 All
-                      </button>
-                      <button
-                        onClick={() => setSessionCategory('one-day')}
-                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${sessionCategory === 'one-day' ? 'bg-white text-blue-500 shadow-sm' : 'text-ink/30 hover:text-ink/60'}`}
-                      >
-                        🎫 One-Day
-                      </button>
-                      <button
-                        onClick={() => setSessionCategory('membership')}
-                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${sessionCategory === 'membership' ? 'bg-white text-purple-600 shadow-sm' : 'text-ink/30 hover:text-ink/60'}`}
-                      >
-                        📦 Membership
-                      </button>
-                    </div>
-                  </div>
-
-                  {locations.length > 1 && (
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-ink/30">Branch:</span>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black uppercase text-ink/40 tracking-widest">Status</label>
                       <select
-                        value={locationFilter}
-                        onChange={(e) => setLocationFilter(e.target.value)}
-                        className="bg-slate-50 border-none rounded-xl py-2 px-4 text-xs font-bold text-ink outline-none focus:ring-2 focus:ring-coral/20 cursor-pointer transition-all"
+                        value={viewType}
+                        onChange={(e) => setViewType(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-sm font-bold text-ink focus:border-coral focus:ring-2 focus:ring-coral/20 transition-all outline-none shadow-sm cursor-pointer appearance-none"
                       >
-                        <option value="all">All Locations</option>
-                        {locations.map(loc => (
-                          <option key={loc._id} value={loc._id}>{loc.name}</option>
-                        ))}
+                        <option value="current">Current</option>
+                        <option value="upcoming">Upcoming</option>
+                        <option value="past">Past</option>
+                        <option value="cancelled">Cancelled</option>
                       </select>
                     </div>
-                  )}
+
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black uppercase text-ink/40 tracking-widest">Category</label>
+                      <select
+                        value={sessionCategory}
+                        onChange={(e) => setSessionCategory(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-sm font-bold text-ink focus:border-coral focus:ring-2 focus:ring-coral/20 transition-all outline-none shadow-sm cursor-pointer appearance-none"
+                      >
+                        <option value="all">All Categories</option>
+                        <option value="one-day">One-Day</option>
+                        <option value="membership">Membership</option>
+                      </select>
+                    </div>
+
+                    {locations.length > 1 && (
+                      <div className="flex flex-col gap-2 sm:col-span-2 lg:col-span-4">
+                        <label className="text-[10px] font-black uppercase text-ink/40 tracking-widest">Branch Location</label>
+                        <select
+                          value={locationFilter}
+                          onChange={(e) => setLocationFilter(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-sm font-bold text-ink focus:border-coral focus:ring-2 focus:ring-coral/20 transition-all outline-none shadow-sm cursor-pointer appearance-none"
+                        >
+                          <option value="all">All Locations</option>
+                          {locations.map(loc => (
+                            <option key={loc._id} value={loc._id}>{loc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {loading ? (
@@ -605,18 +607,18 @@ export default function TrainerDashboard() {
                           </div>
                         </div>
 
-                        <div className="mt-6 pt-4 border-t border-slate-200/60 flex justify-between items-center">
+                        <div className="mt-6 pt-4 border-t border-slate-200/60 flex flex-col sm:flex-row gap-4 justify-between sm:items-center">
                           <span className="text-[10px] font-black text-ink/30 uppercase tracking-[0.2em]">
                             {session.bookedParticipants} {session.classType === 'Class' && `/ ${session.capacity}`} Attendees
                           </span>
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             {viewType === 'upcoming' && session.status !== 'cancelled' && (
                               <>
                                 {session.trainerStatus === 'pending' && (
                                   <div className="flex gap-1.5 mr-2 pr-2 border-r border-slate-200">
                                     <button
                                       onClick={() => handleUpdateTrainerStatus(session._id, 'accepted')}
-                                      className="text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-all shadow-md shadow-emerald-500/10"
+                                      className="text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-all shadow-md shadow-emerald-500/10 flex-1 sm:flex-none text-center"
                                     >
                                       {!session.trainerId ? 'Claim & Accept' : 'Accept'}
                                     </button>
@@ -624,7 +626,7 @@ export default function TrainerDashboard() {
                                 )}
                                 <button
                                   onClick={() => setCancellingSession(session)}
-                                  className="text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl text-red-500 hover:bg-red-50 transition-all border border-red-100"
+                                  className="text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl text-red-500 hover:bg-red-50 transition-all border border-red-100 flex-1 sm:flex-none text-center"
                                 >
                                   Cancel
                                 </button>
@@ -633,7 +635,7 @@ export default function TrainerDashboard() {
                             <button
                               onClick={() => handleViewRoster(session)}
                               disabled={session.status === 'cancelled'}
-                              className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all ${session.status === 'cancelled' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : selectedSession?._id === session._id ? 'bg-coral text-white' : 'text-coral hover:bg-coral/10'}`}
+                              className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all flex-1 sm:flex-none text-center ${session.status === 'cancelled' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : selectedSession?._id === session._id ? 'bg-coral text-white' : 'text-coral hover:bg-coral/10'}`}
                             >
                               {session.status === 'cancelled' ? 'Cancelled' : selectedSession?._id === session._id ? 'Selected' : 'View Roster'}
                             </button>

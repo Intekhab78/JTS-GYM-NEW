@@ -841,6 +841,41 @@ export const resolveRefundRequest = asyncHandler(async (req, res) => {
   res.json({ message: `Refund request ${status}` });
 });
 
+export const forceRefund = asyncHandler(async (req, res) => {
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) throw new Error('Booking not found');
+
+  // Verify it's a paid booking
+  if (booking.paymentStatus !== 'completed' && booking.status !== 'confirmed') {
+    throw new Error('Only paid/confirmed bookings can be refunded');
+  }
+
+  // Force refund: Set status to cancelled and refundStatus to refunded
+  booking.refundStatus = 'refunded';
+  booking.status = 'cancelled';
+  booking.refundRejectionReason = `Forced refund by staff (${req.user.name}) - No Show`;
+  
+  const invoiceRec = await Invoice.findOne({ bookingId: booking._id });
+  if (invoiceRec) { 
+    invoiceRec.status = 'cancelled'; 
+    await invoiceRec.save(); 
+  }
+
+  await booking.save();
+  
+  // Notify admin room
+  const io = req.app.get('socketio');
+  if (io) {
+    io.to('admin_room').emit('booking_updated', {
+      bookingId: booking._id,
+      status: booking.status,
+      paymentStatus: booking.paymentStatus
+    });
+  }
+
+  res.json({ message: 'Booking force refunded successfully' });
+});
+
 export const lookupGuestBooking = asyncHandler(async (req, res) => {
   const { email, bookingNumber } = req.query;
   const booking = await Booking.findOne({
