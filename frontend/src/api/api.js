@@ -2,7 +2,13 @@ import axios from 'axios';
 import { getToken, clearAuth } from '../utils/auth.js';
 import { getLocationSlug } from '../utils/location.js';
 
-const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const isNative = typeof window !== 'undefined' && (
+  window.Capacitor?.isNativePlatform?.() ||
+  window.location.protocol === 'capacitor:' ||
+  window.navigator?.userAgent?.includes('wv') // Android WebView
+);
+
+const isLocalhost = !isNative && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
 // Default to the online backend URL
 let apiBase = 'https://gymapi.jtsmiddleeast.com/api';

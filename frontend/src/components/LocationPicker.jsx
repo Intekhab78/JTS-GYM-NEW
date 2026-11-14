@@ -11,22 +11,50 @@ export default function LocationPicker({ compact = false, allowAll = false }) {
     api
       .get('/locations?activeClasses=true')
       .then((res) => {
-        const list = res.data || [];
-        const options = allowAll ? [{ _id: 'all', slug: 'all', name: 'All locations' }, ...list] : list;
+        let list = res.data || [];
+        const user = JSON.parse(localStorage.getItem('kfb_user') || 'null');
+        const isSuper = user?.role === 'superadmin';
+        const isStaff = user && (
+          user.role === 'admin' ||
+          user.role === 'trainer' ||
+          (user.permissions && user.permissions.length > 0) ||
+          !['parent', 'customer'].includes(user.role?.toLowerCase())
+        );
+
+        // If staff and not superadmin, restrict to their assigned locations
+        if (user && !isSuper && isStaff) {
+          const assignedIds = [
+            ...(user.locationIds || []),
+            ...(user.locationId ? [user.locationId] : [])
+          ].filter(Boolean).map(l => (typeof l === 'string' ? l : (l._id || l.id)));
+
+          if (assignedIds.length > 0) {
+            list = list.filter(l => assignedIds.includes(l._id));
+          } else {
+            list = [];
+          }
+        }
+
+        const options = (allowAll && isSuper) ? [{ _id: 'all', slug: 'all', name: 'All locations' }, ...list] : list;
         setLocations(options);
 
-        // Smarter default selection
+        // Smarter default selection / sync with allowed options
         const saved = getSelectedLocation();
-        if (!saved && options.length) {
-          const user = JSON.parse(localStorage.getItem('kfb_user') || 'null');
-          const userLoc = user?.locationId ? options.find(l => l._id === user.locationId) : null;
+        const isSavedAllowed = saved && options.some(l => l._id === saved._id);
+
+        if (!isSavedAllowed && options.length) {
+          const userLocId = typeof user?.locationId === 'string' ? user.locationId : user?.locationId?._id;
+          const userLoc = userLocId ? options.find(l => l._id === userLocId) : null;
           const defaultLoc = userLoc || options[0];
           setSelected(defaultLoc);
           setSelectedLocation(defaultLoc);
+          localStorage.setItem('selectedBranch', defaultLoc._id);
+        } else if (isSavedAllowed) {
+          setSelected(saved);
         }
       })
       .catch(() => { });
-  }, [allowAll, selected]);
+  }, [allowAll]);
 
   useEffect(() => {
     const handleChange = () => setSelected(getSelectedLocation());
@@ -37,6 +65,9 @@ export default function LocationPicker({ compact = false, allowAll = false }) {
   const handleSelect = (loc) => {
     setSelected(loc);
     setSelectedLocation(loc);
+    if (loc?._id) {
+      localStorage.setItem('selectedBranch', loc._id);
+    }
   };
 
   if (!locations.length) return null;

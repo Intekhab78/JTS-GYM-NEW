@@ -1,12 +1,22 @@
-export const resolveReadLocationId = (req) => {
+export const resolveReadLocationId = (req, requestedLocationId = null) => {
+  const reqLoc = requestedLocationId || req.locationId;
   if (!req.user) {
-    return req.locationId ? req.locationId.toString() : null;
+    return reqLoc ? reqLoc.toString() : null;
   }
 
   const isSuperadmin = req.user?.role === 'superadmin';
 
   if (isSuperadmin) {
-    return req.locationId ? req.locationId.toString() : null;
+    return reqLoc ? reqLoc.toString() : null;
+  }
+
+  const isStaff = req.user.role === 'admin' ||
+    req.user.role === 'trainer' ||
+    (req.user.permissions && req.user.permissions.length > 0) ||
+    !['parent', 'customer'].includes(req.user.role?.toLowerCase());
+
+  if (!isStaff) {
+    return reqLoc ? reqLoc.toString() : null;
   }
 
   const allowedIds = [];
@@ -14,23 +24,25 @@ export const resolveReadLocationId = (req) => {
     allowedIds.push(...req.user.locationIds.map(id => id.toString()));
   }
   if (req.user?.locationId) {
-    if (!allowedIds.includes(req.user.locationId.toString())) {
-      allowedIds.push(req.user.locationId.toString());
+    const singleId = req.user.locationId.toString();
+    if (!allowedIds.includes(singleId)) {
+      allowedIds.push(singleId);
     }
   }
 
   // If a specific location is requested, check if allowed
-  if (req.locationId && allowedIds.includes(req.locationId.toString())) {
-    return req.locationId.toString();
+  if (reqLoc && allowedIds.includes(reqLoc.toString())) {
+    return reqLoc.toString();
   }
 
   // If no specific location requested, or requested one is not allowed, return their first allowed location
   return allowedIds.length > 0 ? allowedIds[0] : '000000000000000000000000';
 };
 
-export const resolveReadLocationIds = (req) => {
+export const resolveReadLocationIds = (req, requestedLocationId = null) => {
+  const reqLoc = requestedLocationId || req.locationId;
   if (!req.user) {
-    return req.locationId ? [req.locationId.toString()] : null;
+    return reqLoc && reqLoc !== 'all' ? [reqLoc.toString()] : null;
   }
 
   const isSuperadmin = req.user?.role === 'superadmin';
@@ -40,18 +52,28 @@ export const resolveReadLocationIds = (req) => {
     allowedIds.push(...req.user.locationIds.map(id => id.toString()));
   }
   if (req.user?.locationId) {
-    if (!allowedIds.includes(req.user.locationId.toString())) {
-      allowedIds.push(req.user.locationId.toString());
+    const singleId = req.user.locationId.toString();
+    if (!allowedIds.includes(singleId)) {
+      allowedIds.push(singleId);
     }
   }
 
   if (isSuperadmin) {
-    return req.locationId ? [req.locationId.toString()] : null;
+    return reqLoc && reqLoc !== 'all' ? [reqLoc.toString()] : null;
   }
 
-  if (req.locationId) {
-    if (allowedIds.includes(req.locationId.toString())) {
-      return [req.locationId.toString()];
+  const isStaff = req.user.role === 'admin' ||
+    req.user.role === 'trainer' ||
+    (req.user.permissions && req.user.permissions.length > 0) ||
+    !['parent', 'customer'].includes(req.user.role?.toLowerCase());
+
+  if (!isStaff) {
+    return reqLoc && reqLoc !== 'all' ? [reqLoc.toString()] : null;
+  }
+
+  if (reqLoc && reqLoc !== 'all') {
+    if (allowedIds.includes(reqLoc.toString())) {
+      return [reqLoc.toString()];
     } else {
       return ['000000000000000000000000']; // Not authorized for this location
     }

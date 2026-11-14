@@ -41,7 +41,7 @@ const RazorpayCheckout = ({ totalAmount, onSubmit, onCancel, prefillName = '', p
         currency: order.currency,
         name: 'JTS Kids Gym',
         description: 'Kids Fitness Booking & Membership Payment',
-        image: 'https://gymapi.jtsonline.shop/uploads/logo.png', // Logo path
+        image: 'https://gymapi.jtsmiddleeast.com/uploads/logo.png', // Logo path
         order_id: order.orderId,
         handler: async function (response) {
           setLoading(true);

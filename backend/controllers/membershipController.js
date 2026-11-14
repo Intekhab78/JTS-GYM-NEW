@@ -496,8 +496,10 @@ export const createMembership = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error(`You can only select up to ${plan.sessionsPerWeek} training days per week for this plan.`);
   }
-  const planCapacity = plan.classesIncluded || 1;
-  const membershipUnits = reqUnits || Math.max(1, Math.ceil(totalWeeklySpots / planCapacity));
+  // -1 = unlimited/time-based (classesIncluded is 0 or null, or explicit type)
+  const isInfinite = plan.classesIncluded === 0 || !plan.classesIncluded || plan.type === 'unlimited' || plan.type === 'time-based' || plan.type === 'subscription' || plan.type === 'credit-based';
+  const planCapacity = isInfinite ? Infinity : (plan.classesIncluded || 1);
+  const membershipUnits = isInfinite ? 1 : (reqUnits || Math.max(1, Math.ceil(totalWeeklySpots / planCapacity)));
 
   // Use provided startDate or default to now
   const startDate = reqStartDate ? new Date(reqStartDate) : new Date();
@@ -526,9 +528,6 @@ export const createMembership = asyncHandler(async (req, res) => {
   } else if (plan.durationWeeks) {
     endDate = addWeeks(startDate, plan.durationWeeks);
   }
-
-  // -1 = unlimited/time-based (classesIncluded is 0 or null, or explicit type)
-  const isInfinite = plan.classesIncluded === 0 || plan.type === 'unlimited' || plan.type === 'time-based';
 
   let baseClasses = plan.classesIncluded ?? (plan.type === 'dropin' ? 1 : 0);
   let classesRemaining = isInfinite ? -1 : baseClasses * membershipUnits;
