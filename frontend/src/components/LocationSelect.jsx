@@ -34,26 +34,40 @@ export default function LocationSelect({ allowAll = false }) {
         const locRes = await api.get('/locations?all=true');
         const list = locRes.data || [];
         const isSuper = activeUser?.role === 'superadmin';
+        const isStaff = activeUser && (
+          activeUser.role === 'admin' ||
+          activeUser.role === 'trainer' ||
+          (activeUser.permissions && activeUser.permissions.length > 0) ||
+          !['parent', 'customer'].includes(activeUser.role?.toLowerCase())
+        );
         
         let filtered = list;
 
-        // If logged in and not superadmin, only show assigned locations if any are assigned
-        if (activeUser && !isSuper) {
-          const assignedIds = (activeUser.locationIds || []).map(l => typeof l === 'string' ? l : l._id);
+        // If logged in and not superadmin, only show assigned locations
+        if (activeUser && !isSuper && isStaff) {
+          const assignedIds = [
+            ...(activeUser.locationIds || []),
+            ...(activeUser.locationId ? [activeUser.locationId] : [])
+          ].filter(Boolean).map(l => (typeof l === 'string' ? l : (l._id || l.id)));
+
           if (assignedIds.length > 0) {
             filtered = list.filter(l => assignedIds.includes(l._id));
+          } else {
+            filtered = [];
           }
         }
 
         // Superadmins always get the 'All locations' option
-        const options = isSuper ? [{ _id: 'all', slug: 'all', name: 'All locations' }, ...list] : filtered;
+        const options = (isSuper && allowAll) ? [{ _id: 'all', slug: 'all', name: 'All locations' }, ...list] : filtered;
         
         setLocations(options);
         setAvailableBranches(options.map(o => o._id));
 
-        // Default selection logic
-        if (!selectedBranch && options.length > 0) {
+        // Default selection logic: ensure selectedBranch is actually inside options
+        const optionIds = options.map(o => o._id);
+        if ((!selectedBranch || !optionIds.includes(selectedBranch)) && options.length > 0) {
           setSelectedBranch(options[0]._id);
+          setSelectedLocation(options[0]);
         }
       } catch (err) {
         console.error("Error loading location data", err);

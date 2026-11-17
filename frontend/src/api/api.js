@@ -2,10 +2,16 @@ import axios from 'axios';
 import { getToken, clearAuth } from '../utils/auth.js';
 import { getLocationSlug } from '../utils/location.js';
 
-const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const isNative = typeof window !== 'undefined' && (
+  window.Capacitor?.isNativePlatform?.() ||
+  window.location.protocol === 'capacitor:' ||
+  window.navigator?.userAgent?.includes('wv') // Android WebView
+);
+
+const isLocalhost = !isNative && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
 // Default to the online backend URL
-let apiBase = 'https://gymapi.jtsonline.shop/api';
+let apiBase = 'https://gymapi.jtsmiddleeast.com/api';
 
 if (isLocalhost) {
   try {
@@ -18,7 +24,7 @@ if (isLocalhost) {
       console.log('Local backend is running. Using: http://localhost:5000/api');
     }
   } catch (e) {
-    console.log('Local backend is offline. Switched to online backend: https://gymapi.jtsonline.shop/api');
+    console.log('Local backend is offline. Switched to online backend: https://gymapi.jtsmiddleeast.com/api');
   }
 }
 

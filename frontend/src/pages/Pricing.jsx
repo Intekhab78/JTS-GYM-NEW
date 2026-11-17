@@ -56,7 +56,7 @@ export default function Pricing() {
 
   const fetchPlans = async () => {
     try {
-      const locationId = getLocationId();
+      const locationId = getLocationId() || localStorage.getItem('selectedBranch');
       const res = await api.get('/plans', { params: { locationId } });
       setPlans(res.data);
 
@@ -247,10 +247,14 @@ export default function Pricing() {
   };
 
   const totalWeeklySessions = preferredDays.length * (preferredSlots.length || 1);
-  const isUnlimited = selectedPlan?.type !== 'dropin' && !selectedPlan?.classesIncluded;
+  const isUnlimited = selectedPlan?.type === 'time-based' ||
+    selectedPlan?.type === 'subscription' ||
+    selectedPlan?.type === 'unlimited' ||
+    selectedPlan?.type === 'credit-based' ||
+    (selectedPlan?.type !== 'dropin' && (!selectedPlan?.classesIncluded || selectedPlan?.classesIncluded === 0));
   const baseCapacity = isUnlimited ? Infinity : (selectedPlan?.classesIncluded || 1);
   const effectiveCapacity = baseCapacity * (claimBogo ? 2 : 1);
-  const membershipUnits = Math.max(1, Math.ceil(totalWeeklySessions / effectiveCapacity));
+  const membershipUnits = isUnlimited ? 1 : Math.max(1, Math.ceil(totalWeeklySessions / effectiveCapacity));
   const multipliedPrice = selectedPlan ? (selectedPlan.price * membershipUnits) : 0;
 
   useEffect(() => {

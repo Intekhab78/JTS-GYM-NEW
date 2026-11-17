@@ -10,18 +10,26 @@ export const BranchProvider = ({ children }) => {
 
   useEffect(() => {
     if (user) {
-      // If superadmin, availableBranches will be set by the component that fetches all locations
-      // For others, it's their assigned locationIds
-      if (user.role !== 'superadmin') {
-        const newUserBranches = user.locationIds || [];
+      const isSuper = user.role === 'superadmin';
+      const isStaff = user.role === 'admin' ||
+        user.role === 'trainer' ||
+        (user.permissions && user.permissions.length > 0) ||
+        !['parent', 'customer'].includes(user.role?.toLowerCase());
+
+      if (!isSuper && isStaff) {
+        const newUserBranches = [
+          ...(user.locationIds || []),
+          ...(user.locationId ? [user.locationId] : [])
+        ].filter(Boolean);
         
         // Simple equality check to prevent infinite loop
         if (JSON.stringify(newUserBranches) !== JSON.stringify(availableBranches)) {
           setAvailableBranches(newUserBranches);
         }
 
-        if (!selectedBranch && newUserBranches.length > 0) {
-          const firstBranch = typeof newUserBranches[0] === 'string' ? newUserBranches[0] : newUserBranches[0]._id;
+        const branchIds = newUserBranches.map(b => (typeof b === 'string' ? b : (b._id || b.id)));
+        if ((!selectedBranch || !branchIds.includes(selectedBranch)) && branchIds.length > 0) {
+          const firstBranch = branchIds[0];
           setSelectedBranch(firstBranch);
           localStorage.setItem('selectedBranch', firstBranch);
         }

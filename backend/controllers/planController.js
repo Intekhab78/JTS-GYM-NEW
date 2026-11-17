@@ -8,11 +8,30 @@ import { resolveReadLocationId, resolveWriteLocationId } from '../utils/location
 import { withUAT } from '../middleware/uatMiddleware.js';
 
 export const getPlans = asyncHandler(async (req, res) => {
-  const { locationId: queryLocationId, all } = req.query;
-  const locationId = queryLocationId || resolveReadLocationId(req);
+  const { all } = req.query;
+  const locationId = resolveReadLocationId(req, req.query.locationId);
 
   // Show plans for the specific location OR global plans (locationId: null)
   let filter = (locationId && locationId !== 'all') ? { $or: [{ locationId }, { locationId: null }] } : {};
+
+  // If staff member (not superadmin), restrict to their allowed locations
+  const isSuperadmin = req.user?.role === 'superadmin';
+  const isStaff = req.user && (
+    req.user.role === 'admin' ||
+    req.user.role === 'trainer' ||
+    (req.user.permissions && req.user.permissions.length > 0) ||
+    !['parent', 'customer'].includes(req.user.role?.toLowerCase())
+  );
+
+  if (req.user && !isSuperadmin && isStaff) {
+    const allowedIds = resolveReadLocationIds(req, req.query.locationId);
+    filter = {
+      $or: [
+        { locationId: { $in: allowedIds } },
+        { locationId: null }
+      ]
+    };
+  }
 
   // If not 'all=true' (public view), only show active plans
   if (all !== 'true') {

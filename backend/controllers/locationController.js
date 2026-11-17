@@ -15,16 +15,27 @@ export const getLocations = asyncHandler(async (req, res) => {
     throw new Error('Brand context missing');
   }
 
-  if (req.user && ['admin', 'trainer'].includes(req.user.role)) {
-    const allowedIds = [];
+  const isSuperadmin = req.user?.role === 'superadmin';
+  const isStaff = req.user && (
+    req.user.role === 'admin' ||
+    req.user.role === 'trainer' ||
+    (req.user.permissions && req.user.permissions.length > 0) ||
+    !['parent', 'customer'].includes(req.user.role?.toLowerCase())
+  );
+
+  let allowedIds = null;
+  if (req.user && !isSuperadmin && isStaff) {
+    const ids = [];
     if (req.user.locationIds && req.user.locationIds.length > 0) {
-      allowedIds.push(...req.user.locationIds.map(id => id.toString()));
+      ids.push(...req.user.locationIds.map(id => id.toString()));
     }
     if (req.user.locationId) {
-      if (!allowedIds.includes(req.user.locationId.toString())) {
-        allowedIds.push(req.user.locationId.toString());
+      const singleId = req.user.locationId.toString();
+      if (!ids.includes(singleId)) {
+        ids.push(singleId);
       }
     }
+    allowedIds = ids;
     if (allowedIds.length > 0) {
       query._id = { $in: allowedIds };
     } else {
@@ -49,6 +60,10 @@ export const getLocations = asyncHandler(async (req, res) => {
       const sessionLocations = await Session.distinct('locationId');
       const planLocations = await Plan.distinct('locationId', { status: 'active' });
       activeLocationIds = [...new Set([...classLocations, ...sessionLocations, ...planLocations].map(id => id?.toString()).filter(Boolean))];
+    }
+
+    if (allowedIds) {
+      activeLocationIds = activeLocationIds.filter(id => allowedIds.includes(id));
     }
     
     query._id = { $in: activeLocationIds };

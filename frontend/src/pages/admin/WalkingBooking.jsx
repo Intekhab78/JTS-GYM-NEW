@@ -332,8 +332,20 @@ export default function WalkingBooking() {
     return (selectedChildrenIds?.length || 0) + (newChildren?.length || 0);
   }, [selectedChildrenIds, newChildren]);
 
+  const isUnlimited = useMemo(() => {
+    if (!selectedPlan) return false;
+    return (
+      selectedPlan.type === 'time-based' ||
+      selectedPlan.type === 'subscription' ||
+      selectedPlan.type === 'unlimited' ||
+      selectedPlan.type === 'credit-based' ||
+      (selectedPlan.type !== 'dropin' && (!selectedPlan.classesIncluded || selectedPlan.classesIncluded === 0))
+    );
+  }, [selectedPlan]);
+
   const membershipUnits = useMemo(() => {
     if (bookingMode !== 'package' || !selectedPlan) return 1;
+    if (isUnlimited) return 1;
     const days = preferredDays?.length || 0;
     const slots = preferredSlots?.length || 1;
     const totalSelected = days * slots;
@@ -344,7 +356,7 @@ export default function WalkingBooking() {
     const effectiveCapacity = baseCapacity * (isBogo ? 2 : 1);
 
     return Math.max(1, Math.ceil(totalSelected / effectiveCapacity));
-  }, [bookingMode, selectedPlan, preferredDays, preferredSlots, selectedPromo, bogoOption]);
+  }, [bookingMode, selectedPlan, preferredDays, preferredSlots, selectedPromo, bogoOption, isUnlimited]);
 
   const calculateDiscount = (promo, price) => {
     if (!promo || !price) return 0;

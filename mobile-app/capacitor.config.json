@@ -1,0 +1,9 @@
+{
+  "appId": "com.jtsgym.app",
+  "appName": "JTS Gym",
+  "webDir": "../frontend/dist",
+  "server": {
+    "hostname": "jts-gym.jtsmiddleeast.com",
+    "androidScheme": "https"
+  }
+}

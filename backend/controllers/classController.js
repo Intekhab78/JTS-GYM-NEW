@@ -7,10 +7,24 @@ import { resolveReadLocationId, resolveWriteLocationId } from '../utils/location
 import { withUAT } from '../middleware/uatMiddleware.js';
 
 export const getClasses = asyncHandler(async (req, res) => {
-  const { locationId: queryLocationId, all } = req.query;
-  const locationId = queryLocationId || resolveReadLocationId(req);
+  const { all } = req.query;
+  const locationId = resolveReadLocationId(req, req.query.locationId);
   
   let filter = (locationId && locationId !== 'all') ? { locationId } : {};
+
+  // If staff member (not superadmin), restrict to their allowed locations
+  const isSuperadmin = req.user?.role === 'superadmin';
+  const isStaff = req.user && (
+    req.user.role === 'admin' ||
+    req.user.role === 'trainer' ||
+    (req.user.permissions && req.user.permissions.length > 0) ||
+    !['parent', 'customer'].includes(req.user.role?.toLowerCase())
+  );
+
+  if (req.user && !isSuperadmin && isStaff) {
+    const allowedIds = resolveReadLocationIds(req, req.query.locationId);
+    filter.locationId = { $in: allowedIds };
+  }
   if (all !== 'true') {
     filter.status = 'active';
   }
