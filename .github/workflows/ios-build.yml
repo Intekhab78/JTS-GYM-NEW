@@ -1,0 +1,60 @@
+name: Build iOS IPA (Unsigned)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build JTS Gym iOS IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install & build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install mobile-app & sync Capacitor iOS
+        working-directory: mobile-app
+        run: |
+          npm ci
+          npx cap sync ios
+
+      - name: Archive iOS App (Unsigned)
+        working-directory: mobile-app/ios/App
+        run: |
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -archivePath "$PWD/build/App.xcarchive" \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package Unsigned .ipa
+        working-directory: mobile-app/ios/App
+        run: |
+          mkdir -p build/ipa/Payload
+          cp -r build/App.xcarchive/Products/Applications/App.app build/ipa/Payload/
+          cd build/ipa
+          zip -r ../../JTS-Gym-unsigned.ipa Payload
+
+      - name: Upload JTS-Gym-unsigned.ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JTS-Gym-unsigned-ipa
+          path: mobile-app/ios/App/JTS-Gym-unsigned.ipa
+          retention-days: 14
